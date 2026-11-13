@@ -17,3 +17,5 @@ UI/Panel.lua
 UI/Details.lua
 UI/Tooltip.lua
 UI/Bags.lua
+UI/BagSpace.lua
+UI/Settings.lua

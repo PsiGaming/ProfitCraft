@@ -21,11 +21,14 @@ With [WowUp](https://wowup.io): install from this repository's URL. Or download 
 - **Bags** (button in the panel, or `/pcraft bags`) lists every disenchantable item in your bags with its disenchant estimate, AH price and merchant price; the best option after the AH cut is marked.
 - The panel's third mode, **Disenchant**, ranks recipes by crafting the item and disenchanting it.
 
+**Reagent bag free slots** (off by default; turn on in Settings): shows the reagent bag's free slots on its bag bar button. For the normal bags, turn on Blizzard's own "Show Free Bag Space" (Options > Interface).
+
 How profit is calculated: AH price of the product × number made × (1 − 5% AH cut) − reagent cost. Each reagent costs the lower of its merchant price and its AH price. The listing deposit is left out, because it is refunded when the item sells. Recipes with a missing price are listed last and never counted as profitable.
 
 ## Commands
 
 - `/pcraft`: show or hide the panel (with a profession window open)
+- `/pcraft settings`: open the settings window (also the "Settings" button in the panel)
 - `/pcraft bags`: disenchant values of the items in your bags
 - `/pcraft tooltip on|off`: the disenchant line in item tooltips
 - `/pcraft debug on|off`: show errors in chat as they happen (off by default)

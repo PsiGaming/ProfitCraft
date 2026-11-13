@@ -11,6 +11,7 @@ local DEFAULT_SETTINGS = {
 	ahCut = 0.05,         -- share of the sale price the AH keeps (web sources: 5%; to confirm in game)
 	panelShown = true,    -- side panel open next to the profession window
 	tooltipDisenchant = true, -- disenchant estimate line in item tooltips
+	reagentBagFreeSlots = false, -- free slots on the reagent bag button (off by default)
 }
 
 -- upgrades[n] turns a version n-1 database into version n.

@@ -22,6 +22,11 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
   - **Craft and disenchant:** a third side-panel mode, "Disenchant", ranks recipes by crafting and disenchanting the product (estimate × quantity × (1 − AH cut) − reagent cost); also shown in the row tooltip and the recipe details.
 - [x] **Debug mode, off by default.** Errors never pop up while playing; they are always written to a small error log. With debug mode on, they are also shown in chat. `/pcraft debug on|off` in 0.1, plus a checkbox in the settings window from 0.3; `/pcraft errors` shows the log. (Decided 2026-11-13.)
 
+## Version 0.1, added before the first install (2026-11-13)
+
+- [x] **Reagent bag free slots, off by default**: "(n)" on the reagent bag button, styled like Blizzard's backpack count. The normal bags use Forever's built-in "Show Free Bag Space" option (Options > Interface; one total on the backpack button), which Sylice uses for the normal bags (2026-11-13). Not checked: whether Blizzard's total also counts the reagent bag (if it does, the reagent slots are counted in both numbers).
+- [x] **Settings window brought forward from 0.3** (our own window, see Requirements): disenchant tooltip line, reagent bag free slots, debug mode. `/pcraft settings` or the side panel's "Settings" button.
+
 ## Version 0.2 (standalone: works without Auctionator)
 
 - [x] **Our own AH scan**, so ProfitCraft works without Auctionator (decided 2026-11-13). Also gives the listing detail Auctionator's API doesn't expose.
@@ -40,7 +45,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] "Sell to vendor instead" comparison (no listing fee; matters for cheap items).
 - [x] Pricing reagents you can craft yourself at their crafting cost, limited depth.
 - [x] Shopping list sent to Auctionator's shopping list. Without Auctionator: to be decided (e.g. ProfitCraft's own simple list).
-- [x] Settings window (our own; see Requirements).
+- [x] Settings window (our own; see Requirements). Done early, in 0.1; 0.3 adds more options to it.
 - [x] **Item tooltip prices**, with an on/off setting in the settings window (Sylice wants it, 2026-11-13). **One line per source, each with its own price and age** (e.g. "Auctionator: 1s 20c, updated today"; from 0.2 also "ProfitCraft scan: 1s 15c, 2 h ago"), like CraftProfit's tooltip, which shows Auctionator's price with its "Updated" age and its own scan separately. Possibly also merchant sell price, and for items you can craft: craft cost and profit (to decide before 0.3).
 
 ## Later / maybe

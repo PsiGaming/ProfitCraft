@@ -181,6 +181,12 @@ local function Create()
 	end)
 	bagsButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+	local settingsButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+	settingsButton:SetSize(70, 22)
+	settingsButton:SetPoint("RIGHT", bagsButton, "LEFT", -4, 0)
+	settingsButton:SetText("Settings")
+	settingsButton:SetScript("OnClick", function() PC:Send("TOGGLE_SETTINGS") end)
+
 	statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	statusText:SetPoint("BOTTOMLEFT", 12, 10)
 	statusText:SetPoint("BOTTOMRIGHT", -12, 10)
