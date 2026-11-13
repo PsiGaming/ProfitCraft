@@ -25,6 +25,7 @@ Reviewed 2026-11-13 from the addons' code (ForeverProfit v1.8.0, CraftProfit 0.5
 | "Cheapest 20%" average against bait listings | No | Yes | Later (own scan data only) |
 | Own AH scan | Fallback | Full scan plus deeper search | **0.2** (needed to work without Auctionator) |
 | Profit tags in Blizzard's recipe list | No | Yes | Later, unchecked |
+| Disenchant value (tooltips, bag list, craft-and-disenchant ranking) | No | Separate addon by the same author (CraftShuffle) | **0.1** (Auctionator's estimate) |
 | Levelling mode | Yes | No | Future |
 | TSM | Yes (default) | Yes | Not doing |
 | Manual price override | Yes | No | Not doing |

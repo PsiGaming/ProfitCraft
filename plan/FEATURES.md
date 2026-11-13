@@ -13,9 +13,13 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] **Missing prices are flagged**, never counted as profit.
 - [x] **Per craft / per stack toggle** in the side panel (a button in its header; no entry in the settings window). Per stack shows the profit for one full stack of the crafted item, with the stack size shown (e.g. "×20"); the ranking re-sorts by the chosen mode. The stack size is read from the item data (`itemStackCount` from `C_Item.GetItemInfo`); items that don't stack (e.g. gear) have a stack size of 1, so both modes show the same. The last mode used is remembered. (Decided 2026-11-13.)
 - [x] **AH prices from Auctionator**, through its public API.
-- [x] **Vendor prices.** Buy price (what a merchant charges for a reagent): Auctionator's recorded price. If it has none yet, use the reagent's AH price, marked as such; flag it as missing only if there is no AH price either. (Decided 2026-11-13.) Sell price (what a merchant pays): Blizzard's item data (`sellPrice` from `C_Item.GetItemInfo`), always available.
+- [x] **Vendor prices.** A reagent costs the **lower** of its merchant buy price (Auctionator's recorded price) and its AH price; with no merchant price known, the AH price is used; with neither, it is "missing". (Decided 2026-11-13; the reagent lines show "vendor" or "AH".) Sell price (what a merchant pays): Blizzard's item data (`sellPrice` from `C_Item.GetItemInfo`), used in the bag window.
 - [x] **Fast by design:** prices are calculated once, and again only when prices or recipes change. Sorting, filtering, scrolling and searching only re-read the saved results.
 - [x] **Slash command `/pcraft`.** (Decided 2026-11-13.)
+- [x] **Disenchanting** (added 2026-11-13), using **Auctionator's disenchant estimate** (`GetDisenchantPriceByItemID`; its disenchant rules are not verified for Forever, so values are labelled as Auctionator's estimate):
+  - **Item tooltips:** a "Disenchant (Auctionator est.)" line; `/pcraft tooltip on|off` (checkbox in the settings window from 0.3).
+  - **Bag window** (`/pcraft bags`, or "Bags" in the side panel): every disenchantable item in your bags with its disenchant estimate, AH price and merchant price per item; the option that pays most after the AH cut is marked. Soulbound items have no AH option.
+  - **Craft and disenchant:** a third side-panel mode, "Disenchant", ranks recipes by crafting and disenchanting the product (estimate × quantity × (1 − AH cut) − reagent cost); also shown in the row tooltip and the recipe details.
 - [x] **Debug mode, off by default.** Errors never pop up while playing; they are always written to a small error log. With debug mode on, they are also shown in chat. `/pcraft debug on|off` in 0.1, plus a checkbox in the settings window from 0.3; `/pcraft errors` shows the log. (Decided 2026-11-13.)
 
 ## Version 0.2 (standalone: works without Auctionator)
@@ -26,7 +30,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 
 ## Requirements (apply to every version)
 
-- **Works fully without Auctionator** (from 0.2 on; 0.1 only loads cleanly without it and says it has no price source). ProfitCraft is a standalone addon; Auctionator is an optional, recommended source (`## OptionalDeps: Auctionator` in the `.toc`, so it loads first when installed, never `## Dependencies`). Auctionator's data is used when available. (Decided 2026-11-13.)
+- **Works fully without Auctionator** (from 0.2 on; disenchant estimates stay Auctionator-only until ProfitCraft has its own Forever-verified disenchant table; 0.1 only loads cleanly without it and says it has no price source). ProfitCraft is a standalone addon; Auctionator is an optional, recommended source (`## OptionalDeps: Auctionator` in the `.toc`, so it loads first when installed, never `## Dependencies`). Auctionator's data is used when available. (Decided 2026-11-13.)
 - **Closing the settings must not open the game menu.** ProfitCraft uses its own settings window, never Blizzard's settings panel (decided 2026-11-13). Cause: Blizzard's settings panel always reopens the game menu when it is closed (Forever UI source, `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`, called by both the Close button and Escape).
 
 ## Version 0.3

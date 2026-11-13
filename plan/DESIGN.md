@@ -41,7 +41,9 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 | `Profit.lua` | Profit | Calculates and stores one result per recipe; keeps the ranked list |
 | `UI/Panel.lua` | Window | The compact ranked side panel |
 | `UI/Details.lua` | Window | Profit block in Blizzard's recipe details |
-| `UI/Settings.lua` | Window | Our own settings window |
+| `UI/Tooltip.lua` | Window | Disenchant estimate line in item tooltips (TooltipDataProcessor post-call) |
+| `UI/Bags.lua` | Window | Movable bag window: disenchantable items with disenchant / AH / merchant values |
+| `UI/Settings.lua` | Window | Our own settings window (0.3) |
 
 ## 4. When things are recalculated
 
@@ -69,6 +71,8 @@ How Auctionator announces data changes is **(check in game)**: its API documenta
 **Merchant sell price** (for "Sell to vendor instead", later): `sellPrice` from `C_Item.GetItemInfo` (Forever source). Item data may not be loaded yet; then it is requested (`C_Item.RequestLoadItemDataByID`) and filled in on `GET_ITEM_INFO_RECEIVED` (Forever source).
 
 **Profit per craft:** `sale price × output quantity × (1 − AH cut) − sum of reagent costs`.
+
+**Craft and disenchant** (the side panel's "Disenchant" mode): `Auctionator's disenchant estimate per item × output quantity × (1 − AH cut) − reagent cost` (the materials are sold on the AH). Nil when the product can't be disenchanted.
 
 **Profit per stack** (the side panel's per-stack mode): `profit per craft ÷ output quantity × stack size`, where the stack size is `itemStackCount` from `C_Item.GetItemInfo` (Forever source) for the crafted item. Items that don't stack have a stack size of 1. Profit stores per-item profit and stack size for every recipe, so switching between per craft and per stack only re-sorts the stored results; it never recalculates.
 - AH cut: a setting, default 5% (web sources; **check in game**).
