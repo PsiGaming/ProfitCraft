@@ -36,7 +36,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
 
-## Version 0.1-beta.1 (built 2026-11-14, not yet published)
+## Version 0.1-beta.1 (2026-11-14)
 
 - [x] Trainer and recipe item tooltips list each reagent with its price and source, the source in front so the amounts stay right-aligned: "4 x Copper Bar   (AH) 3s 80c", "2 x Coarse Thread   (Vend) 20c" (the cheaper of the two is used, as before). Replaces the "No AH price: ..." line; a reagent without a price shows "no price".
 - [x] Wording (Sylice, 2026-11-14): "AH price" becomes **"Auction price"** (tooltips, side panel row tooltip, recipe details); reagent sources are **"(AH)"** / **"(Vend)"** (short, Sylice), in front of the amount, everywhere, also in the recipe details. "Auction price" (not Auctionator's "Auction") keeps ProfitCraft's lines distinguishable from Auctionator's. Banners and the D/E Bags "AH" column are unchanged.
