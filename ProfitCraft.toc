@@ -2,7 +2,7 @@
 ## Title: ProfitCraft
 ## Notes: Ranks your crafting recipes by profit and estimates disenchant values, using Auctionator's prices.
 ## Author: Psipherious
-## Version: 0.1-alpha.2
+## Version: 0.1-alpha.3
 ## SavedVariables: ProfitCraftDB
 ## OptionalDeps: Auctionator
 

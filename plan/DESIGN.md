@@ -183,3 +183,32 @@ From the code review of ForeverProfit v1.8.0 and CraftProfit 0.5.2 (2026-11-13).
 - From ForeverProfit: long jobs split across frames; recipes with missing prices are never shown as profitable.
 - From CraftProfit: a private namespace with one event frame and an internal message system; protection against bait listings; per-reagent break-even prices; an AH scan that respects the AH's request limits.
 
+
+## 12. Disenchant values (findings 2026-11-13, to build next)
+
+### Why Auctionator can't be the source
+- ProfitCraft 0.1 used `Auctionator.API.v1.GetDisenchantPriceByItemID` (and, from alpha.1, `...ByItemLink`). On Forever both return nothing for every item, so every item showed "no D/E price".
+- Auctionator's own tooltip setting says its disenchant prices only work for some later expansions (WoD, Shadowlands, MoP and a few others), not Forever (Sylice, in game, 2026-11-13). The CurseForge description of the addon "Disenchant Forever" says the same: on WoW Forever, Auctionator only prices disenchanting for much later expansions.
+- Having Enchanting makes no difference (Sylice tested with an Enchanting alt).
+- **Decision (Sylice, 2026-11-13): no separate addon; ProfitCraft builds its own disenchant estimate.**
+
+### How Disenchant Buddy does it (reference, `addons/reference/DisenchantBuddy`, v2.8.0, GPLv3: study only, never copy code)
+1. Reads quality, item level and item class from `C_Item.GetItemInfo` (`AddDisenchantInfo.lua:36`).
+2. Skips grey/white items and anything that isn't armor or a weapon; legendaries show "cannot be disenchanted".
+3. Looks the result up in hard-coded tables per quality (`DisenchantResults/Uncommon.lua`, `Rare.lua`, `Epic.lua`): green armor and green weapons separately, blues, purples. Each row: material item ID, chance %, min and max quantity. Example: green armor, item level <= 15: Strange Dust 80% (1-2), Lesser Magic Essence 20% (1-2).
+4. Prices each material with Auctionator's AH price and adds up an average value: price × chance × (min + max) / 2.
+- **Weak spot:** it detects Forever by build number (`GameVersions.lua:12`) but treats Forever exactly like Classic in its tables (`if IsClassic or IsForever`, e.g. `Uncommon.lua:144`). Its README doesn't list Forever as supported (its `.toc` does). So its numbers are Classic's rules, unverified for Forever.
+
+### Public sources for the table (all unverified for Forever)
+- [wow-professions.com Forever disenchanting guide](https://www.wow-professions.com/forever/disenchanting-guide): brackets by **required** level.
+- [forevermastery.com disenchant table](https://forevermastery.com/en/tools/disenchant): both required level and item level (item level ≈ required level + 5).
+- [foreverdb.net enchanting](https://foreverdb.net/profession/enchanting): by **item** level, labelled "Classic data".
+- [Wowpedia disenchanting tables](https://wowpedia.fandom.com/wiki/Disenchanting_tables): general (not Forever), by item level; matches foreverdb.
+- world-of-warcraft-forever.wiki: contradicts all others; ignore.
+- General shape agreed by all: green armor mostly dust (~75%), green weapons mostly essence (~75%), small shard chance (~5%); blue = 1 shard (Nexus Crystal ~0.5% at high level); purple = shard(s) or Nexus Crystal.
+
+### Plan
+1. **ProfitCraft's own table** (our own code and data entry from the public sources; game facts, not Disenchant Buddy's code), keyed by quality, armor/weapon and level; priced with Auctionator's AH prices (`GetAuctionPriceByItemID`, which works on Forever). Labelled as an estimate until confirmed.
+2. **Open question to settle first:** item level or required level? Both are in `C_Item.GetItemInfo` (`itemLevel`, `itemMinLevel`). Settle with real disenchants on Sylice's Enchanting alt.
+3. **Confirm with real data:** a PsiLab disenchant recorder (item ID, quality, item level, required level, materials received), then later ProfitCraft learning from the player's own disenchants (as ForeverForge Auction and Forever Simple Market do: switch to own odds after enough samples).
+4. Replace `PC.Auctionator:GetDisenchantPrice` with the new source; the tooltip line, D/E Bags window and craft-and-disenchant mode keep working unchanged. Remove the "(Auctionator est.)" wording.

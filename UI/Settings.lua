@@ -14,6 +14,11 @@ local _, PC = ...
 local OPTIONS = {
 	{ key = "tooltipDisenchant", label = "Disenchant estimate in item tooltips",
 		help = "Adds Auctionator's disenchant estimate to item tooltips." },
+	-- Mirrors Blizzard's own "Show Free Bag Space" (Options > Interface): reads and writes the game setting
+	-- displayFreeBagSlots, which Blizzard's backpack button watches (CVAR_UPDATE). ProfitCraft stores nothing.
+	{ cvar = "displayFreeBagSlots", label = "Free slots on the backpack button (Blizzard)",
+		help = "The same switch as Blizzard's \"Show Free Bag Space\" (Options > Interface): free slots in your "
+			.. "normal bags, shown on the backpack button. Changing it here changes Blizzard's option." },
 	{ key = "reagentBagFreeSlots", label = "Free slots on the reagent bag button",
 		help = "Shows the reagent bag's free slots on its bag bar button. For the normal bags, turn on Blizzard's "
 			.. "own \"Show Free Bag Space\" option (Options > Interface)." },
@@ -27,9 +32,22 @@ local ROW_SPACING = 30
 local pages = {}  -- every page built, for syncing
 local window
 
--- Makes the checkboxes reflect the saved settings.
+local function GetValue(option)
+	if option.cvar then return C_CVar.GetCVarBool(option.cvar) and true or false end
+	return PC.db.settings[option.key] and true or false
+end
+
+local function SetValue(option, value)
+	if option.cvar then
+		C_CVar.SetCVar(option.cvar, value and "1" or "0")
+	else
+		PC:SetSetting(option.key, value)
+	end
+end
+
+-- Makes the checkboxes reflect the saved settings (and Blizzard's, for mirrored ones).
 local function Sync(page)
-	for key, box in pairs(page.checkboxes) do box:SetChecked(PC.db.settings[key] and true or false) end
+	for option, box in pairs(page.checkboxes) do box:SetChecked(GetValue(option)) end
 end
 
 -- Builds one settings page (the checkboxes) inside `page`, starting at (x, y) from its top left.
@@ -41,7 +59,7 @@ local function BuildPage(page, x, y)
 		box.Text:SetText(option.label)
 		box.Text:SetFontObject("GameFontHighlight")
 		box:SetScript("OnClick", function(self)
-			PC:Call("settings " .. option.key, PC.SetSetting, PC, option.key, self:GetChecked() and true or false)
+			PC:Call("settings " .. (option.key or option.cvar), SetValue, option, self:GetChecked() and true or false)
 		end)
 		box:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -50,7 +68,7 @@ local function BuildPage(page, x, y)
 			GameTooltip:Show()
 		end)
 		box:SetScript("OnLeave", function() GameTooltip:Hide() end)
-		page.checkboxes[option.key] = box
+		page.checkboxes[option] = box
 	end
 	page:HookScript("OnShow", Sync)
 	pages[#pages + 1] = page
@@ -91,9 +109,16 @@ PC:Listen("TOGGLE_SETTINGS", function()
 	window:SetShown(not window:IsShown())
 end)
 
--- Keep every visible page right when a setting changes anywhere (the other page, /pcraft debug on, ...).
-PC:Listen("SETTINGS_CHANGED", function()
+-- Keep every visible page right when a setting changes anywhere (the other page, /pcraft debug on, or
+-- Blizzard's own Interface option for the mirrored game setting).
+local function SyncVisible()
 	for _, page in ipairs(pages) do
 		if page:IsVisible() then Sync(page) end
+	end
+end
+PC:Listen("SETTINGS_CHANGED", SyncVisible)
+PC:RegisterEvent("CVAR_UPDATE", function(name)
+	for _, option in ipairs(OPTIONS) do
+		if option.cvar and option.cvar == name then SyncVisible() end
 	end
 end)

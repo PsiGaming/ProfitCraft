@@ -200,23 +200,53 @@ local function Create()
 	end
 end
 
--- A tab in the next free slot of Forever's profession tab column (directly under the last visible Blizzard
--- tab, 2 px apart like Blizzard's own), that shows or hides the panel. Same template and art as Blizzard's
--- tabs (LargeSideTabButtonTemplate). Lit while the panel is open. Re-placed whenever Blizzard refreshes its
--- tabs, so it never sits at a fixed spot another addon may use (What's Training puts its tab 10 px from the
--- bottom of that edge, Crafting/Crafting.lua:197 in its 11.4.6).
+-- A tab that shows or hides the panel, in the next free slot of Forever's right-hand tab column counted from
+-- the BOTTOM of the profession window: the lowest slot is 10 px above the bottom edge (where What's Training
+-- puts its tab by default, Crafting/Crafting.lua:197 in its 11.4.6); if another addon's frame is already in
+-- that spot, the tab moves up above it, 2 px apart like Blizzard's tabs. Same template and art as Blizzard's
+-- tabs (LargeSideTabButtonTemplate). Lit while the panel is open. Re-placed when Blizzard refreshes its tabs
+-- and whenever the panel updates, since other addons may add or move their tabs at any time.
+local BOTTOM_MARGIN, SLOT_GAP = 10, 2
+
+-- Other frames attached to the window's right edge in the tab column (not Blizzard's tabs, not ours).
+local function OccupiedSpans()
+	local column = ProfessionsFrame:GetRight()
+	if not column then return {} end
+	local blizzard = { [ProfessionsFrame.ProfessionsOverviewTab or false] = true }
+	for _, tab in ipairs(ProfessionsFrame.rightProfessionTabs or {}) do blizzard[tab] = true end
+	local spans = {}
+	for _, child in ipairs({ ProfessionsFrame:GetChildren() }) do
+		if child ~= toggleTab and child ~= frame and not blizzard[child] and child:IsShown() then
+			local left, bottom, top = child:GetLeft(), child:GetBottom(), child:GetTop()
+			if left and bottom and top and left >= column - 4 and left <= column + 20 then
+				spans[#spans + 1] = { bottom = bottom, top = top }
+			end
+		end
+	end
+	return spans
+end
+
 local function PlaceToggleTab()
 	if not toggleTab then return end
-	local last = ProfessionsFrame.ProfessionsOverviewTab
-	for _, tab in ipairs(ProfessionsFrame.rightProfessionTabs or {}) do
-		if tab:IsShown() then last = tab end
+	local frameBottom = ProfessionsFrame:GetBottom()
+	local height = toggleTab:GetHeight()
+	local offset = BOTTOM_MARGIN
+	if frameBottom and height and height > 0 then
+		local spans = OccupiedSpans()
+		local moved = true
+		while moved do
+			moved = false
+			local slotBottom, slotTop = frameBottom + offset, frameBottom + offset + height
+			for _, span in ipairs(spans) do
+				if span.top > slotBottom and span.bottom < slotTop then
+					offset = span.top - frameBottom + SLOT_GAP
+					moved = true
+				end
+			end
+		end
 	end
 	toggleTab:ClearAllPoints()
-	if last then
-		toggleTab:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -2)
-	else
-		toggleTab:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 0, -60)
-	end
+	toggleTab:SetPoint("BOTTOMLEFT", ProfessionsFrame, "BOTTOMRIGHT", 0, offset)
 end
 
 local function CreateToggleTab()
@@ -242,6 +272,8 @@ end
 function UpdateToggleTab()
 	if not toggleTab then return end
 	PlaceToggleTab()
+	-- Other addons may create or move their tab after us; check again once the frame has been laid out.
+	C_Timer.After(0, function() PC:Call("place tab", PlaceToggleTab) end)
 	local onRecipes = PC.Recipes.isOpen and not BookPageShown()
 	toggleTab:SetShown(onRecipes)
 	toggleTab.SelectedTexture:SetShown(frame ~= nil and frame:IsShown())

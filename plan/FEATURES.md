@@ -36,6 +36,11 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
 
+## Version 0.1-alpha.3 (2026-11-13)
+
+- [x] ProfitCraft's side tab takes the next free slot **from the bottom** of the profession window's right edge (bottom slot 10 px up, like What's Training's; moves up above any other addon's frame already in that column), instead of under Blizzard's profession tabs.
+- [x] Settings: a "Free slots on the backpack button (Blizzard)" checkbox that mirrors Blizzard's own "Show Free Bag Space" (game setting `displayFreeBagSlots`); ProfitCraft stores nothing for it, and it follows changes made in Blizzard's Interface options.
+
 ## Version 0.1-alpha.2 (2026-11-13)
 
 - [x] ProfitCraft's side tab takes the next free slot under Blizzard's profession tabs instead of a fixed spot (it overlapped What's Training's tab, which sits 10 px from the bottom).
@@ -94,6 +99,6 @@ The deposit questions only matter for the "Listing deposit risk" item in "Later 
 - [ ] **The deposit above the 1s minimum** (item value? auction length?), and whether the 1s minimum changes to 1c (discussed by a developer, no patch note found).
 - [ ] **Is the AH cut 5% in Forever?** Web sources say yes; not yet confirmed in game.
 - [ ] **Can an addon ask Forever's AH what the deposit will be?** Check with an in-game command when building starts.
-- [ ] **Why Auctionator gave no disenchant values** in the first test: does Auctionator's own tooltip show a disenchant price for those items? If not, Auctionator has no Forever disenchant data and ProfitCraft needs its own table.
+- [x] **Why Auctionator gave no disenchant values:** its disenchant prices only cover later expansions, not Forever (Sylice, 2026-11-13). ProfitCraft builds its own estimate next; see `DESIGN.md` section 12.
 - [ ] **Which Auctionator functions exist on Forever** (especially the price-age one)? Check in game when building starts.
 - [ ] **What unit is Auctionator's price age in** (`GetAuctionAgeByItemID`): whole days, or something finer? Decides how often the same-day tie rule applies. Check with `/dump` in game.
