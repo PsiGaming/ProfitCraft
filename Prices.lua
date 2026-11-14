@@ -14,6 +14,16 @@ function Prices:GetAuctionPrice(itemID)
 	return nil
 end
 
+-- How each price source is named on screen, in front of a reagent's price: "(Vend)" / "(AH)".
+Prices.SOURCE_LABEL = { vendor = "Vend", ah = "AH", ["ah-cheaper"] = "AH" }
+
+-- A reagent's price with its source in front, e.g. "(Vend) 10c", so the amounts stay right-aligned;
+-- or a grey "no price".
+function Prices:FormatReagent(total, how)
+	if not total then return "|cff888888no price|r" end
+	return "|cff888888(" .. (self.SOURCE_LABEL[how] or "?") .. ")|r " .. PC:FormatMoney(total)
+end
+
 -- Cost of one reagent: the lower of its merchant buy price and its AH price.
 -- Returns unit price and how it was priced: "vendor", "ah" (no merchant price known) or "ah-cheaper".
 -- Returns nil if neither price is known.

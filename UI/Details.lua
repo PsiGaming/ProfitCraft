@@ -49,8 +49,6 @@ local function SetLines(rows)
 	block:SetHeight(math.max(1, #rows) * LINE_HEIGHT)
 end
 
-local HOW_LABEL = { vendor = "vendor", ah = "AH", ["ah-cheaper"] = "AH" }
-
 -- The block sits at the bottom of the recipe details (above the Track Recipe line) and grows upward, so it
 -- never covers what Blizzard or other addons stack under the reagents (Auctionator adds "To Craft" and
 -- "Profit" lines there). Lines that don't fit between the reagents and the bottom are left out.
@@ -97,16 +95,11 @@ function Details:Update()
 	end
 	for _, reagent in ipairs(result.reagents) do
 		local label = reagent.quantity .. " x " .. PC.Items:GetName(reagent.itemID)
-		local value
-		if reagent.total then
-			value = PC:FormatMoney(reagent.total) .. " |cff888888" .. (HOW_LABEL[reagent.how] or "") .. "|r"
-		else
-			value = "|cffff8888no price|r"
-		end
+		local value = reagent.total and PC.Prices:FormatReagent(reagent.total, reagent.how) or "|cffff8888no price|r"
 		rows[#rows + 1] = { label, value }
 	end
 	if not result.salePrice and not result.bound and result.recipe.outputItemID then
-		rows[#rows + 1] = { "|cffff8888No AH price for the product|r" }
+		rows[#rows + 1] = { "|cffff8888No auction price for the product|r" }
 	end
 	while #rows > maxLines do table.remove(rows) end
 	SetLines(rows)

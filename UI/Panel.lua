@@ -40,7 +40,7 @@ local function ShowRowTooltip(row)
 		if result.stackSize and result.stackSize > 1 then
 			GameTooltip:AddDoubleLine("Profit per stack (" .. result.stackSize .. ")", PC:FormatProfit(result.profitStack))
 		end
-		GameTooltip:AddDoubleLine("AH price per item", PC:FormatMoney(result.salePrice), 0.8, 0.8, 0.8)
+		GameTooltip:AddDoubleLine("Auction price per item", PC:FormatMoney(result.salePrice), 0.8, 0.8, 0.8)
 	elseif result.bound then
 		GameTooltip:AddLine("Bind on pickup: can't be sold", 0.8, 0.8, 0.8)
 	end

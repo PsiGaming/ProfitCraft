@@ -36,7 +36,12 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
 
-## Version 0.1-beta.0 (in progress, 2026-11-14; 0.1 is feature-complete, so betas get fixes only and new features go to 0.2)
+## Version 0.1-beta.1 (built 2026-11-14, not yet published)
+
+- [x] Trainer and recipe item tooltips list each reagent with its price and source, the source in front so the amounts stay right-aligned: "4 x Copper Bar   (AH) 3s 80c", "2 x Coarse Thread   (Vend) 20c" (the cheaper of the two is used, as before). Replaces the "No AH price: ..." line; a reagent without a price shows "no price".
+- [x] Wording (Sylice, 2026-11-14): "AH price" becomes **"Auction price"** (tooltips, side panel row tooltip, recipe details); reagent sources are **"(AH)"** / **"(Vend)"** (short, Sylice), in front of the amount, everywhere, also in the recipe details. "Auction price" (not Auctionator's "Auction") keeps ProfitCraft's lines distinguishable from Auctionator's. Banners and the D/E Bags "AH" column are unchanged.
+
+## Version 0.1-beta.0 (2026-11-14; 0.1 is feature-complete, so betas get fixes only and new features go to 0.2)
 
 - [x] **Price warning banner** at the top of the side panel's list: Auctionator not installed ("required"), no AH prices yet, or prices 48 hours old or more ("scan the AH with Auctionator"). ProfitCraft notes the time of each Auctionator scan per realm (Auctionator's DB-update callback); until it has seen one, it falls back to Auctionator's price age in whole days.
 - [x] **Setting: how old prices may get before the banner warns**, a slider in the settings window: Off, 1, 2 (default), 3, 4 days. Whole days only, because Auctionator's price age counts whole days (Sylice, 2026-11-14). Off only hides the old-prices warning; "Auctionator is required" and "No AH prices yet" still show.
@@ -68,7 +73,8 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 ## Version 0.2 (standalone: works without Auctionator)
 
 - [x] **Our own AH scan**, so ProfitCraft works without Auctionator (decided 2026-11-13). Also gives the listing detail Auctionator's API doesn't expose.
-- [x] **Our own merchant recording** of vendor buy prices, taken whenever a merchant window is open (the game only reveals buy prices there); used when Auctionator has no vendor price.
+- [x] **Our own merchant recording** of vendor buy prices, taken whenever a merchant window is open (the game only reveals buy prices there: item data has only the sell price, Forever API docs); used when Auctionator has no vendor price. Fills itself as you visit vendors. **No pre-filled vendor price table** (Sylice, 2026-11-14): no Forever source for buy prices found, and reagents from vendors you never visit fall back to the AH price or show as missing.
+- [ ] **Feed our scan into Auctionator's data** (Sylice's idea, 2026-11-14: our scan may be more thorough). **Not possible through Auctionator's public API** (checked in Auctionator 346, `Source/API/v1/`): it only reads prices, ages, vendor prices and disenchant values, runs searches and edits shopping lists; nothing writes prices. The only way would be writing into Auctionator's internal saved price database, which is undocumented and could corrupt its data whenever Auctionator changes. Not doing unless Auctionator adds a write function. ProfitCraft itself still uses its own newer scan prices (next item).
 - [x] **AH prices: whichever is most recent, per item.** For each item, compare Auctionator's price (if Auctionator is installed and has one) with ProfitCraft's own scan data and use the newer one. If both are from the same day and can't be told apart (Auctionator's age may only be in whole days), use our own. (Decided 2026-11-13.)
 
 ## Requirements (apply to every version)
@@ -83,6 +89,8 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] "Sell to vendor instead" comparison (no listing fee; matters for cheap items).
 - [x] Pricing reagents you can craft yourself at their crafting cost, limited depth.
 - [x] Shopping list sent to Auctionator's shopping list. Without Auctionator: to be decided (e.g. ProfitCraft's own simple list).
+  - **Must not interfere with Auctionator's own crafting tools** (Sylice, 2026-11-14). Auctionator already adds a block to Blizzard's recipe details ("To Craft" / "Profit" lines and a **[Search]** button that searches the AH for the selected recipe's product and reagents; `Source_Mainline/CraftingInfo/Professions.lua`). ProfitCraft's list must not replace, cover or duplicate that button; it should only add what Auctionator lacks (e.g. several recipes at once, quantities minus what's in the bags).
+  - Open: whether the shopping list is still worth building given Auctionator's button (asked 2026-11-14).
 - [x] Settings window (our own; see Requirements). Done early, in 0.1; 0.3 adds more options to it.
 - [x] **Item tooltip prices**, with an on/off setting in the settings window (Sylice wants it, 2026-11-13). **One line per source, each with its own price and age** (e.g. "Auctionator: 1s 20c, updated today"; from 0.2 also "ProfitCraft scan: 1s 15c, 2 h ago"), like CraftProfit's tooltip, which shows Auctionator's price with its "Updated" age and its own scan separately. Possibly also merchant sell price, and for items you can craft: craft cost and profit (to decide before 0.3).
 

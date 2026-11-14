@@ -71,7 +71,7 @@ A reverse index (reagent → recipes) to recalculate only affected recipes is no
 
 **Sale price of a crafted item:** its AH price (Auctionator). Milestone 2: the most recent of Auctionator's and our own price, per item; on a same-day tie (Auctionator's age may only be in whole days), our own.
 
-**Reagent cost:** the lower of its merchant buy price and its AH price (the recipe-details block marks each line "vendor" or "AH").
+**Reagent cost:** the lower of its merchant buy price and its AH price (the recipe details and the trainer/recipe tooltips mark each reagent "(Vend)" or "(AH)" in front of its amount, beta.1).
 - Merchant buy price: Auctionator's recorded merchant price (milestone 2: or our own recording). The game only reveals buy prices while a merchant window is open. Can be fractional per item (e.g. 4.6c, PsiLab).
 - If no merchant price is known, the AH price is used; with neither, the reagent is "missing".
 - Basic and automatic reagent slots count (`Enum.CraftingReagentType` Basic = 1, Automatic = 3); optional and finishing reagents don't. A slot that accepts several items uses the cheapest.

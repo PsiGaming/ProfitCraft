@@ -18,21 +18,20 @@ local function AddRecipeLines(tooltip, recipeID)
 	tooltip:AddLine(" ")
 	tooltip:AddLine("|cff4fc3f7ProfitCraft|r")
 	tooltip:AddDoubleLine("Reagent cost", PC:FormatMoney(result.cost), 1, 1, 1)
+	for _, reagent in ipairs(result.reagents) do
+		tooltip:AddDoubleLine("  " .. reagent.quantity .. " x " .. PC.Items:GetName(reagent.itemID),
+			PC.Prices:FormatReagent(reagent.total, reagent.how), 0.8, 0.8, 0.8)
+	end
 	if result.bound then
 		tooltip:AddDoubleLine("Sale", "|cff888888bind on pickup: can't be sold|r", 1, 1, 1)
 	else
-		tooltip:AddDoubleLine("AH price" .. amount, PC:FormatMoney(result.salePrice and result.salePrice * result.quantity),
+		tooltip:AddDoubleLine("Auction price" .. amount, PC:FormatMoney(result.salePrice and result.salePrice * result.quantity),
 			1, 1, 1)
 		tooltip:AddDoubleLine("Profit per craft", result.profitCraft and PC:FormatProfit(result.profitCraft) or "|cff888888?|r",
 			1, 1, 1)
 	end
 	if result.profitDisenchant then
 		tooltip:AddDoubleLine("Craft and disenchant", PC:FormatProfit(result.profitDisenchant), 1, 1, 1)
-	end
-	if #result.missing > 0 then
-		local names = {}
-		for _, itemID in ipairs(result.missing) do names[#names + 1] = PC.Items:GetName(itemID) end
-		tooltip:AddLine("No AH price: " .. table.concat(names, ", "), 0.6, 0.6, 0.6, true)
 	end
 end
 
