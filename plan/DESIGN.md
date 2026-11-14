@@ -1,82 +1,89 @@
-# ProfitCraft: design (draft)
+# ProfitCraft: design
 
-How ProfitCraft is built. **What** it does is in `FEATURES.md`; this file is the **how**. Draft of 2026-11-13, for review.
+How ProfitCraft is built. **What** it does is in `FEATURES.md`; this file is the **how**. Matches version 0.1-alpha.3 (2026-11-13); sections marked "milestone 2" or "later" are not built yet.
 
-Target: World of Warcraft: Forever, `## Interface: 16001`. API facts marked **(Forever source)** were checked in Blizzard's own Forever UI code (Gethe/wow-ui-source, branch `forever`, build 1.60.1 (70938)); facts marked **(check in game)** are not confirmed yet.
+Target: World of Warcraft: Forever, `## Interface: 16001`. API facts marked **(Forever source)** were checked in Blizzard's own Forever UI code (Gethe/wow-ui-source, branch `forever`, build 1.60.1 (70938)); **(PsiLab)** means confirmed in game with PsiLab; **(check in game)** means not confirmed yet.
 
 ## 1. Principles
 
 These follow from the problems found in ForeverProfit and CraftProfit; the full list is in section 11.
 
-1. **Calculate once, re-read many times.** Profit is calculated when prices or recipes change, never because the user scrolled, searched, filtered or sorted. Those only re-read stored results.
+1. **Calculate once, re-read many times.** Profit is calculated when prices or recipes change, never because the user scrolled, switched mode, or selected a recipe. Those only re-read stored results.
 2. **Parts announce changes; they don't call each other.** A price change is announced as a message; whoever cares (profit calculation, windows) listens. Data code never calls window code.
-3. **Only public interfaces.** Blizzard's API and Auctionator's public API (`Auctionator.API.v1.*`). Blizzard's recipe list is never modified; ProfitCraft adds its own frames next to Blizzard's.
-4. **Errors are quiet while playing, but never lost.** Errors in ProfitCraft's code are caught where game events and messages are handed to the parts, so they never pop up during normal play. Every caught error is written to a small error log (section 6). With **debug mode** on, they are also printed in chat as they happen. Debug mode: `/pcraft debug on|off` (0.1) and a checkbox in the settings window (0.3); off by default. (Decided 2026-11-13.) For comparison, Blizzard's own Lua error window only appears when the `scriptErrors` setting is on (Forever source: `Blizzard_ScriptErrorsFrame.lua`).
+3. **Only public interfaces.** Blizzard's API and Auctionator's public API (`Auctionator.API.v1.*`). Blizzard's frames are never modified; ProfitCraft adds its own frames next to or inside them and follows Blizzard's code only through `hooksecurefunc`/`HookScript` (runs after Blizzard's code, changes nothing of it).
+4. **Errors are quiet while playing, but never lost.** Errors in ProfitCraft's code are caught where game events, messages, hooks and clicks are handed to the parts, so they never pop up during normal play. Every caught error is written to a small error log (section 6). With **debug mode** on, they are also printed in chat as they happen. Debug mode: `/pcraft debug on|off` and a checkbox in the settings; off by default. (Decided 2026-11-13.) Blizzard's own Lua error window only appears when the `scriptErrors` setting is on (Forever source: `Blizzard_ScriptErrorsFrame.lua`; it was off on Sylice's client, PsiLab).
 5. **Saved data has a version number from day one**, is split by ruleset where prices differ, and has a size limit.
 6. **Nothing is assumed from Vanilla, Classic or Retail.** Every API used is checked in the Forever source or in game first.
+7. **Blizzard's current look.** Windows, buttons, dropdowns and tabs use Blizzard's current templates, so ProfitCraft looks like the profession window it sits next to (Sylice, 2026-11-13).
 
 ## 2. Milestones
 
 | Milestone | Version | Contents | Price sources |
 |---|---|---|---|
-| 1 | 0.1 | "Version 0.1" in `FEATURES.md` | Auctionator only (all testers have it installed and scan with it) |
+| 1 | 0.1 | "Version 0.1" and its alphas in `FEATURES.md`; next: own disenchant estimate (section 12) | Auctionator only for AH and merchant prices (all testers have it installed and scan with it) |
 | 2 | 0.2 | "Version 0.2": own AH scan, own merchant recording, "most recent per item" price choice | Auctionator and our own data; works without Auctionator |
 | 3 | 0.3 | "Version 0.3" | Same |
 
-Even in 0.1, Auctionator is listed as `## OptionalDeps: Auctionator`, not `## Dependencies`, so the structure is already standalone: price lookups go through one price module with one "source" per data provider, and milestone 2 adds sources without changing anything else. Without Auctionator, 0.1 loads normally and says once in chat that it has no price source.
+Auctionator is listed as `## OptionalDeps: Auctionator`, not `## Dependencies`, so the structure is already standalone: price lookups go through one price module with one "source" per data provider, and milestone 2 adds sources without changing anything else. Without Auctionator, 0.1 loads normally, says once in chat that it has no price source, and the panel says so too.
+
+Releases are GitHub pre-releases at github.com/PsiGaming/ProfitCraft named `v0.1-alpha.N`, with one zip `ProfitCraft-v0.1-alpha.N-forever.zip` (the `plan/` folder is left out via `.gitattributes`). Sylice decides version numbers.
 
 ## 3. Files and parts
 
-All code shares one private namespace (`local addonName, PC = ...`). The only globals are the saved data (`ProfitCraftDB`), the slash command, and the names of our own frames where Blizzard requires one (e.g. for Escape-to-close).
+All code shares one private namespace (`local addonName, PC = ...`). The only globals are the saved data (`ProfitCraftDB`), the slash command, and the names of our own windows where Blizzard requires one (Escape-to-close): `ProfitCraftPanel`, `ProfitCraftBags`, `ProfitCraftSettings`.
 
 | File | Part | Job |
 |---|---|---|
-| `Core.lua` | Core | Namespace, one event frame that hands game events to the parts, a small message system (`PC:Send(msg, ...)` / `PC:Listen(msg, fn)`), slash command |
-| `Data.lua` | Data | Loads `ProfitCraftDB`, fills defaults, runs version upgrades, prunes old data |
-| `Recipes.lua` | Recipes | Reads the open profession's recipes and reagents from Blizzard's API; announces `RECIPES_CHANGED` |
-| `Prices.lua` | Prices | One question for everyone: "what does item X cost / sell for, from which source, how old?" Asks the sources and applies the rules in section 5 |
-| `Sources/Auctionator.lua` | Source | Wraps Auctionator's public API; announces `PRICES_CHANGED` when Auctionator's data changes |
-| `Sources/ItemData.lua` | Source | Merchant sell price from Blizzard's item data |
-| `Sources/Scan.lua`, `Sources/Merchant.lua` | Source | Milestone 2: our own AH scan and merchant buy-price recording |
-| `Profit.lua` | Profit | Calculates and stores one result per recipe; keeps the ranked list |
-| `UI/Panel.lua` | Window | The compact ranked side panel |
+| `Core.lua` | Core | Namespace, one event frame that hands game events to the parts, a small message system (`PC:Send(msg, ...)` / `PC:Listen(msg, fn)`), debouncing, error log, money formatting (`FormatMoney`; `FormatProfit` adds a green "+" to gains), slash command |
+| `Data.lua` | Data | Loads `ProfitCraftDB`, fills default settings, runs version upgrades; `PC:SetSetting` announces `SETTINGS_CHANGED` |
+| `Sources/Auctionator.lua` | Source | Wraps Auctionator's public API (AH price, price age, merchant price, disenchant); announces `PRICES_CHANGED` when Auctionator's data changes |
+| `Sources/ItemData.lua` | Source | Names, icons, stack sizes and merchant sell prices from Blizzard's item data; requests missing item data once (items that fail to load are not requested again) |
+| `Prices.lua` | Prices | One question for everyone: "what does item X cost / sell for?" Applies the rules in section 5 |
+| `Recipes.lua` | Recipes | Reads the open profession's learned recipes and reagents; announces `PROFESSION_OPENED`, `RECIPES_CHANGED`, `PROFESSION_CLOSED` |
+| `Profit.lua` | Profit | Calculates and stores one result per recipe; keeps a ranked list per mode |
+| `UI/Window.lua` | Window | Shared helpers: window in Blizzard's current frame style, scrolling list, footer |
+| `UI/Panel.lua` | Window | The side panel (ranked list) and the ProfitCraft side tab on the profession window |
 | `UI/Details.lua` | Window | Profit block in Blizzard's recipe details |
-| `UI/Tooltip.lua` | Window | Disenchant estimate line in item tooltips (TooltipDataProcessor post-call) |
-| `UI/Bags.lua` | Window | Movable bag window: disenchantable items with disenchant / AH / merchant values |
-| `UI/Settings.lua` | Window | Our own settings window (0.3) |
+| `UI/Tooltip.lua` | Window | Disenchant line in item tooltips |
+| `UI/Bags.lua` | Window | "D/E Bags": disenchantable items in the bags with disenchant / AH / merchant values |
+| `UI/BagSpace.lua` | Window | Free-slot count on the reagent bag button |
+| `UI/Settings.lua` | Window | The settings page, shown in our own window and in Blizzard's Options > AddOns |
+| `Sources/Scan.lua`, `Sources/Merchant.lua` | Source | Milestone 2 (not built): our own AH scan and merchant buy-price recording |
 
 ## 4. When things are recalculated
 
 | Event | What happens |
 |---|---|
-| Profession window opens, recipes change (`TRADE_SKILL_SHOW`, `TRADE_SKILL_LIST_UPDATE`, `NEW_RECIPE_LEARNED`; Forever source) | Recipes re-reads the recipe list (all learned recipes via `GetAllRecipeIDs` + `learned`, not the window's filtered list). Only if it actually changed: `RECIPES_CHANGED`. Opening the window fires about 3 `TRADE_SKILL_LIST_UPDATE` within 0.2 s (PsiLab), so these are combined into one re-read |
-| Auctionator's data changes | `PRICES_CHANGED` |
-| A setting that affects profit changes (e.g. AH cut) | `SETTINGS_CHANGED` with the setting's name; settings that don't affect profit trigger nothing |
-| `RECIPES_CHANGED` / `PRICES_CHANGED` / profit setting | Profit marks results as stale and recalculates **once**, at most a short moment later (several messages in a row cause one recalculation), and only while the profession window is open; otherwise when it next opens |
-| Results recalculated | Windows that are open redraw from the stored results |
-| Scroll, search, filter, selecting a recipe | Read stored results only; no recalculation |
+| Profession window opens, recipes change (`TRADE_SKILL_SHOW`, `TRADE_SKILL_LIST_UPDATE`, `NEW_RECIPE_LEARNED`; Forever source) | Recipes re-reads the list: all recipes of the open profession via `C_TradeSkillUI.GetAllRecipeIDs`, keeping those with `GetRecipeInfo(id).learned` (not `GetFilteredRecipeIDs`, which follows the window's search and filters; PsiLab). Opening the window fires about 3 `TRADE_SKILL_LIST_UPDATE` within 0.2 s (PsiLab), so these are combined into one re-read 0.3 s later. Only if the list actually changed: `RECIPES_CHANGED`. `PROFESSION_OPENED` is sent one frame after `TRADE_SKILL_SHOW`, once Blizzard has built its window |
+| Auctionator finishes a scan (`Auctionator.API.v1.RegisterForDBUpdate` callback; fires after each scan, PsiLab) | `PRICES_CHANGED` |
+| Item data arrives (`GET_ITEM_INFO_RECEIVED` for an item ProfitCraft asked for) | `ITEM_DATA_CHANGED` (combined, 0.3 s) |
+| The AH cut setting changes | `SETTINGS_CHANGED`; other settings don't recalculate anything |
+| `RECIPES_CHANGED` / `PRICES_CHANGED` / `ITEM_DATA_CHANGED` / AH cut | Profit recalculates **once**, 0.2 s after the last of several messages, and only while a profession window is open |
+| Profession window closes (`TRADE_SKILL_CLOSE`) | Recipes and results are dropped, so the next profession opened never shows the previous one's list; reopening reads and calculates afresh |
+| Results recalculated | Open windows redraw from the stored results |
+| Scroll, switching mode (per craft / per stack / disenchant), selecting a recipe | Re-read stored results only; no recalculation |
 
-Profit keeps a reverse index (reagent → recipes that use it), so a price change for one item can recalculate just the recipes that use it. Whether that is worth it over recalculating the open profession is decided once real timings are known; recalculating one profession's list once per price update is cheap.
-
-How Auctionator announces data changes is **(check in game)**: its API documentation lists a "database updated" registration (`Auctionator.API.v1.RegisterForDBUpdate`). Fallback: re-read prices when the profession window opens and after an Auctionator scan finishes.
+A reverse index (reagent → recipes) to recalculate only affected recipes is not built: recalculating one profession's list once per price update is cheap.
 
 ## 5. Price rules
 
-**Sale price of a crafted item:** its AH price. Milestone 2: the most recent of Auctionator's and our own price, per item; on a same-day tie (Auctionator's age may only be in whole days), our own.
+**Sale price of a crafted item:** its AH price (Auctionator). Milestone 2: the most recent of Auctionator's and our own price, per item; on a same-day tie (Auctionator's age may only be in whole days), our own.
 
-**Reagent cost:** the lowest of its vendor buy price and its AH price.
-- Vendor buy price: Auctionator's recorded vendor price (milestone 2: or our own recording). The game only reveals buy prices while a merchant window is open.
-- If no vendor price is known, the AH price is used and marked as such; if there is no AH price either, the reagent is "missing".
+**Reagent cost:** the lower of its merchant buy price and its AH price (the recipe-details block marks each line "vendor" or "AH").
+- Merchant buy price: Auctionator's recorded merchant price (milestone 2: or our own recording). The game only reveals buy prices while a merchant window is open. Can be fractional per item (e.g. 4.6c, PsiLab).
+- If no merchant price is known, the AH price is used; with neither, the reagent is "missing".
+- Basic and automatic reagent slots count (`Enum.CraftingReagentType` Basic = 1, Automatic = 3); optional and finishing reagents don't. A slot that accepts several items uses the cheapest.
 
-**Merchant sell price** (for "Sell to vendor instead", later): `sellPrice` from `C_Item.GetItemInfo` (Forever source). Item data may not be loaded yet; then it is requested (`C_Item.RequestLoadItemDataByID`) and filled in on `GET_ITEM_INFO_RECEIVED` (Forever source).
+**Merchant sell price:** `sellPrice` from `C_Item.GetItemInfo` (Forever source); used in D/E Bags. Item data may not be loaded yet; then it is requested (`C_Item.RequestLoadItemDataByID`) and filled in on `GET_ITEM_INFO_RECEIVED` (Forever source).
 
 **Profit per craft:** `sale price × output quantity × (1 − AH cut) − sum of reagent costs`.
 
-**Craft and disenchant** (the side panel's "Disenchant" mode): `Auctionator's disenchant estimate per item × output quantity × (1 − AH cut) − reagent cost` (the materials are sold on the AH). Nil when the product can't be disenchanted.
+**Profit per stack:** `profit per craft ÷ output quantity × stack size`, where the stack size is `itemStackCount` from `C_Item.GetItemInfo` (Forever source) for the crafted item; items that don't stack have 1.
 
-**Profit per stack** (the side panel's per-stack mode): `profit per craft ÷ output quantity × stack size`, where the stack size is `itemStackCount` from `C_Item.GetItemInfo` (Forever source) for the crafted item. Items that don't stack have a stack size of 1. Profit stores per-item profit and stack size for every recipe, so switching between per craft and per stack only re-sorts the stored results; it never recalculates.
-- AH cut: a setting, default 5% (web sources; **check in game**).
-- Output quantity: recipes can make more than one item; the recipe data has a minimum and maximum quantity (Forever source: `quantityMin`/`quantityMax` in the trade skill types). A fixed amount (Rough Dynamite ×2, Crafted Light Shot ×200) counts as is; a random range (Heavy Dynamite 1-5) counts at its average, with the range in the tooltip (decided 2026-11-13).
+**Craft and disenchant:** `disenchant value per item × output quantity × (1 − AH cut) − reagent cost` (the materials are sold on the AH). Nil when the product can't be disenchanted. The disenchant value currently comes from Auctionator, which has no disenchant data for Forever, so every recipe shows "no D/E price"; to be replaced by ProfitCraft's own estimate (section 12).
+
+- AH cut: a setting (`ahCut`), default 5% (web sources; **check in game**); no window control yet.
+- Output quantity: recipes can make more than one item (Forever source: `quantityMin`/`quantityMax`; e.g. Smelt Bronze ×2, PsiLab). A fixed amount counts as is; a random range (Heavy Dynamite 1-5) counts at its average, with the range in the tooltip (decided 2026-11-13).
 - No listing deposit (refunded on sale; see `FEATURES.md`).
 - A recipe with any missing price has no profit number; it is listed as incomplete and sorted below all complete ones, never shown as profitable.
 
@@ -87,7 +94,14 @@ One account-wide saved variable, `ProfitCraftDB`:
 ```lua
 ProfitCraftDB = {
   version  = 1,         -- data layout version; Data.lua upgrades older layouts step by step
-  settings = { ... },   -- shared by all characters (includes debug = false, profitMode = "craft" | "stack")
+  settings = {          -- shared by all characters
+    debug = false,                -- errors also printed in chat
+    profitMode = "craft",         -- side panel mode: "craft" | "stack" | "disenchant"
+    ahCut = 0.05,                 -- AH cut on sales
+    panelShown = true,            -- side panel open next to the profession window
+    tooltipDisenchant = true,     -- disenchant line in item tooltips
+    reagentBagFreeSlots = false,  -- free-slot count on the reagent bag button
+  },
   errors   = { ... },   -- error log: the last 50 caught errors (message, where, time, ProfitCraft version), newest first; repeats of the same error only increase a count
   rulesets = {          -- milestone 2: our own AH data, per ruleset (see below)
     ["<ruleset key>"] = {
@@ -98,35 +112,65 @@ ProfitCraftDB = {
 }
 ```
 
-- 0.1 stores only `version` and `settings`; all prices come from Auctionator.
+- 0.1 stores only `version`, `settings` and `errors`; all prices come from Auctionator.
+- The settings checkbox for Blizzard's own free-bag-space option stores nothing here: it reads and writes Blizzard's game setting `displayFreeBagSlots` (section 7).
 - Forever has no classic realms: it has 4 rulesets, each a "megaserver" with its own data: Normal, PvP, Roleplay and Roleplay-PvP; all players of a ruleset share one AH (Sylice, 2026-11-13). Prices are kept per ruleset **and faction** (cross-faction AH assumed not shared until confirmed).
-- **Ruleset key** = `GetRealmName()` with the instance number ("Realm 7") removed, plus the faction: "CAMWOW US2 Realm 7 PvE" + Alliance → `CAMWOW US2 PvE|Alliance`. Removing only "Realm <number>" merges characters on different instances of the same ruleset, while keeping the rest of the name means Roleplay and Roleplay-PvP (names unknown) can't collide with Normal or PvP. The raw realm name is stored with the data, so the key can be corrected later if Forever's naming turns out different.
+- **Ruleset key** (milestone 2) = `GetRealmName()` with the instance number ("Realm 7") removed, plus the faction: "CAMWOW US2 Realm 7 PvE" + Alliance → `CAMWOW US2 PvE|Alliance`. Removing only "Realm <number>" merges characters on different instances of the same ruleset, while keeping the rest of the name means Roleplay and Roleplay-PvP (names unknown; Sylice's guess: "Roleplay" or "RP") can't collide with Normal or PvP. The raw realm name is stored with the data, so the key can be corrected later.
 - Size limit (milestone 2): prices not updated for a set number of days and not used by any recipe ProfitCraft has seen are removed at login.
 - Recipe data is not saved: it is read live when the profession window opens.
 
 ## 7. Windows
 
-All windows use Blizzard's standard templates (all present in the Forever source): `ButtonFrameTemplate` / `PortraitFrameTemplate`, `UICheckButtonTemplate`, `UIPanelButtonTemplate`, `InputBoxTemplate`, `MinimalSliderWithSteppersTemplate`, and `WowScrollBoxList` with `MinimalScrollBar` for scrolling lists.
+All windows use Blizzard's current templates (all present in the Forever source): `ButtonFrameTemplate` (portrait with ProfitCraft's gold-coin icon, title bar, inset; the same family as the profession window), `UIPanelButtonTemplate`, `UICheckButtonTemplate`, `WowStyle1DropdownTemplate` (with `SetupMenu`/`CreateRadio`), `LargeSideTabButtonTemplate`, and `WowScrollBoxList` with `MinimalScrollBar` for scrolling lists (handles row reuse itself; ForeverProfit's hand-made scrolling skipped rows). The first version used the older `BasicFrameTemplateWithInset`; Sylice asked for the current look (alpha.1).
 
 **Side panel (ranked list)**
-- Attached to the right edge of Blizzard's profession window (`ProfessionsFrame`; Forever has its own version of it, Forever source), opens and closes with it, can be detached and moved; its position is saved.
-- Compact: fixed width of about 320 px in 0.1 (ForeverProfit: 620 px plus a 176 px sidebar). Long names are shortened, full name in the tooltip. A resize grip (Forever source: `PanelResizeButtonTemplate`, `SetResizable`/`SetResizeBounds`) can come later if names get cut off. One row per recipe: icon, name, profit. Detail goes in the hover tooltip, not in extra columns.
-- Sorted by profit, incomplete recipes last. Clicking a row selects that recipe in Blizzard's window.
-- Header button toggles **per craft / per stack**; the profit column follows it and per-stack rows show the stack size ("×20"). The mode is saved in `settings.profitMode`.
-- Uses `WowScrollBoxList`, Blizzard's current scrolling list, which handles row reuse itself (ForeverProfit's hand-made scrolling skipped rows).
+- Fixed to the right of Blizzard's profession window (`ProfessionsFrame`), to the right of Forever's own profession side tabs (`ProfessionsOverviewTab`, `Professions1Tab`..`7Tab`, anchored to the window's top-right; Camelot `Blizzard_ProfessionsFrame.xml`). Same height as the window; not movable.
+- Shown only with a recipe list: hidden when the trade skill closes and while Forever's professions overview page (`ProfessionsFrame.BookPage`) is shown; back when it closes.
+- Compact: 320 px wide (ForeverProfit: 620 px plus a 176 px sidebar). One row per recipe: icon, name (shortened if long), profit. Detail goes in the row tooltip (quantity range, profit per craft and per stack, AH price, reagent cost, craft-and-disenchant, items without a price). Clicking a row opens that recipe (`C_TradeSkillUI.OpenRecipe`).
+- Sorted by profit for the chosen mode, incomplete recipes last.
+- Header: a **dropdown** for the mode (Per craft / Per stack / Disenchant, with a tooltip per option; saved in `settings.profitMode`), then **D/E Bags** and **Settings** buttons (Settings in the top-right corner). Per-stack rows show the stack size ("x20"). Profits show a green "+" or red "-".
+- Footer: profession, number of recipes, how many are priced; "Auctionator not found" without Auctionator.
+- The close button hides the panel and remembers it (`settings.panelShown`).
+
+**ProfitCraft side tab** (shows/hides the panel)
+- A `LargeSideTabButtonTemplate` tab with the gold-coin icon, lit while the panel is open, on the profession window's right edge.
+- Placement: the **next free slot from the bottom**: the lowest slot is 10 px above the window's bottom edge (where What's Training puts its tab by default; `addons/reference/WhatsTraining`, `Crafting/Crafting.lua:197`); if another addon's frame occupies that spot in the tab column, the tab moves up above it, 2 px apart. Re-placed after Blizzard's `RefreshRightTabs` and on every panel update (decided by Sylice, alpha.3).
 
 **Recipe details block**
-- A small block in the recipe details of Blizzard's window (`ProfessionsFrame.CraftingPage.SchematicForm`; Forever has its own layout of it, Forever source): net profit and the cost of each reagent.
-- Placed relative to Blizzard's frames, not at hard-coded pixel offsets; how it coexists with other addons that add rows there is tested in game. Sylice's client also runs CraftProfit, whose own panel (`cpPanel`, 304×151) sits in the same recipe-details area (PsiLab, 2026-11-13); disable CraftProfit while testing ProfitCraft, or account for it.
+- In Blizzard's recipe details (`ProfessionsFrame.CraftingPage.SchematicForm`; Camelot layout, 360×484 at Sylice's scale): net profit per craft, craft-and-disenchant (when known), and one line per reagent with its cost and "vendor"/"AH".
+- Sits at the **bottom** of the recipe details, 44 px up (clear of Blizzard's Track Recipe checkbox), aligned with the reagents, growing upward. It keeps 36 px free under the reagents for other addons' lines: Auctionator draws "To Craft" and "Profit" lines right under the reagents, which overlapped ProfitCraft's first placement (Sylice's screenshots, alpha.0). Lines that don't fit are left out; hidden when the recipe has no basic reagents.
+- Follows the selected recipe with `hooksecurefunc(SchematicForm, "Init")`.
 
-**Settings window**
-- Our own window, never Blizzard's settings panel: closing Blizzard's panel always reopens the game menu (Forever source: `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`).
-- Closes with Escape by adding its name to `UISpecialFrames` (Forever source).
-- Opened by the slash command and a button on the side panel.
+**Item tooltips**
+- A "Disenchant" line on item tooltips (`TooltipDataProcessor.AddTooltipPostCall` for item tooltips, item ID from `tooltipData.id`; Forever source). On/off in the settings. Shows nothing until the disenchant source works (section 12).
+
+**D/E Bags window** (`/pcraft bags`, or the panel's D/E Bags button)
+- Movable `ButtonFrameTemplate` window, closes with Escape. Lists every disenchantable item in the bags (backpack, bags 1-4 and reagent bag: `Enum.BagIndex.Backpack` .. `NUM_TOTAL_EQUIPPED_BAG_SLOTS`), combined per item, with disenchant value, AH price (none for soulbound items) and merchant price per item; the option that pays most after the AH cut is marked. Refreshes on `BAG_UPDATE_DELAYED` and price changes.
+
+**Reagent bag free slots**
+- "(n)" on the reagent bag button (`CharacterReagentBag0Slot`, `Enum.BagIndex.ReagentBag` = 5; Forever has one reagent bag slot), styled like Blizzard's backpack count (`NumberFontNormal`, 10 px below centre). Drawn on our own overlay frame; Blizzard's button is untouched. Off by default; hidden without a reagent bag. Updates one frame after `BAG_UPDATE_DELAYED`, like Blizzard's own count.
+- The normal bags use Blizzard's own option (Options > Interface, "Show Free Bag Space", game setting `displayFreeBagSlots`), which ProfitCraft's settings mirror (below).
+
+**Settings**
+- One list of options, built into two identical pages (approach seen in Questie, `addons/reference/Questie`, `Modules/Options/QuestieOptionsEngine.lua`; our own code):
+  - ProfitCraft's own movable window (`/pcraft settings`, or the panel's Settings button). Closing it just closes it: it never goes through Blizzard's settings panel, whose close always reopens the game menu (Forever source: `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`). Closes with Escape (`UISpecialFrames`).
+  - The same page under Blizzard's Options > AddOns > ProfitCraft (`Settings.RegisterCanvasLayoutCategory` + `Settings.RegisterAddOnCategory`, Forever source). Closing that returns to the game menu, which is where the user came from.
+- Each page re-reads the values when shown and after any change (`SETTINGS_CHANGED`, and `CVAR_UPDATE` for the mirrored game setting), so the two never disagree.
+- Options (alpha.3): disenchant line in item tooltips (on); free slots on the backpack button (mirrors Blizzard's `displayFreeBagSlots`, read and written with `C_CVar`); free slots on the reagent bag button (off); debug mode (off).
 
 ## 8. Slash command
 
-`/pcraft` (decided 2026-11-13). Subcommands so far: `/pcraft` (open/close the side panel), `/pcraft debug on|off`, `/pcraft errors` (print the error log; `/pcraft errors clear` empties it). Avoids `/pc` (ProfitCrafter Forever), `/profitcraft` (ProfitCrafting), `/cf` and `/cp` (CraftProfit) and `/fp` (ForeverProfit).
+`/pcraft` (decided 2026-11-13). Avoids `/pc` (ProfitCrafter Forever), `/profitcraft` (ProfitCrafting), `/cf` and `/cp` (CraftProfit) and `/fp` (ForeverProfit).
+
+| Command | Does |
+|---|---|
+| `/pcraft` | Show or hide the side panel (with a profession window open) |
+| `/pcraft settings` | Open or close the settings window |
+| `/pcraft bags` | Open or close the D/E Bags window |
+| `/pcraft tooltip on\|off` | Disenchant line in item tooltips |
+| `/pcraft debug on\|off` | Print errors in chat as they happen |
+| `/pcraft errors` | List logged errors; `/pcraft errors clear` empties the log |
+| anything else | Version and the command list |
 
 ## 9. Own AH scan (milestone 2, outline only)
 
@@ -141,16 +185,18 @@ Decided in detail when milestone 2 starts. Direction:
 Results from PsiLab (2026-11-13) are in `knowledge/forever-vs-vanilla.md`, "Addon API".
 
 - [x] Interface version on the live client is 16001 (build 1.60.1 (70938)). PsiLab, 2026-11-13.
-- [x] Listing recipes: `GetFilteredRecipeIDs` returns only what the window currently lists (it follows the window's search and filters), so ProfitCraft can't use it for a complete ranking. `GetAllRecipeIDs` exists and returns much more per profession. PsiLab, 2026-11-13.
-- [x] `GetAllRecipeIDs` returns only the open profession's recipes (learned and unlearned); `GetRecipeInfo(id).learned` separates the learned ones, which match the window's list. PsiLab alpha.1, 2026-11-13.
-- [x] Auctionator 346 on Forever: all 21 `Auctionator.API.v1` functions present; `RegisterForDBUpdate` fires after each AH scan; vendor prices are recorded. PsiLab, 2026-11-13.
+- [x] Listing recipes: `GetFilteredRecipeIDs` returns only what the window currently lists (it follows the window's search and filters); `GetAllRecipeIDs` returns all recipes of the open profession, learned and unlearned; `GetRecipeInfo(id).learned` separates the learned ones. PsiLab, 2026-11-13.
+- [x] Auctionator 346 on Forever: all 21 `Auctionator.API.v1` functions present; `RegisterForDBUpdate` fires after each AH scan; merchant prices are recorded. PsiLab, 2026-11-13.
+- [x] Auctionator's disenchant prices don't work on Forever (its D/E support covers only later expansions). Sylice, 2026-11-13. See section 12.
+- [x] Saved variables load and save normally on build 70938. PsiLab, 2026-11-13.
+- [x] Reading the ruleset: `GetRealmName()` = "CAMWOW US2 Realm 7 PvE" (ruleset at the end), `GetRealmID()` = 6933. PsiLab, 2026-11-13.
+- [x] All players of a ruleset share one AH (Sylice, 2026-11-13).
+- [x] ProfitCraft's windows, dropdown, side tab, settings in Blizzard's AddOns options and reagent bag count work in game (Sylice, alpha.1-alpha.2, 2026-11-13).
 - [ ] `GetAuctionAgeByItemID` unit: returned 0 for prices from the same day; check again the day after a scan (expected: 1).
 - [ ] AH cut on sale is 5%.
-- [x] Reading the ruleset: `GetRealmName()` = "CAMWOW US2 Realm 7 PvE" (ruleset at the end), `GetRealmID()` = 6933. PsiLab, 2026-11-13.
-- [x] All players of a ruleset share one AH (Sylice, 2026-11-13); key decided above.
 - [ ] Is the AH shared between Horde and Alliance? Assumed not. Only matters for 0.2 (own scan data).
-- [ ] Is the AH shared between factions (affects the ruleset key)? Sylice is checking.
-- [x] Saved variables load and save normally on build 70938 (PsiLab's data survived `/reload`). PsiLab, 2026-11-13.
+- [ ] Does Blizzard's free-bag-space number on the backpack also count the reagent bag?
+- [ ] Disenchant: item level or required level decides the materials? (section 12)
 
 ## 11. Mistakes found in other addons, and our rule against each
 
