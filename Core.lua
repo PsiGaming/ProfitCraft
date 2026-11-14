@@ -123,6 +123,12 @@ function PC:FormatMoney(copper)
 	return text
 end
 
+-- A profit: like FormatMoney, plus a green "+" in front of positive amounts.
+function PC:FormatProfit(copper)
+	if copper ~= nil and math.floor(copper + 0.5) > 0 then return "|cff55ff55+|r" .. self:FormatMoney(copper) end
+	return self:FormatMoney(copper)
+end
+
 ---------------------------------------------------------------------------
 -- Slash command
 ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ local function ReadBags()
 				end
 				entry.count = entry.count + (info.stackCount or 1)
 				entry.bound = entry.bound or info.isBound
+				entry.link = entry.link or info.hyperlink
 			end
 		end
 	end
@@ -43,7 +44,7 @@ local function BuildList()
 	local cut = PC.db.settings.ahCut
 	local list = {}
 	for _, entry in ipairs(ReadBags()) do
-		local disenchant = PC.Auctionator:GetDisenchantPrice(entry.itemID)
+		local disenchant = PC.Auctionator:GetDisenchantPrice(entry.itemID, entry.link)
 		if disenchant then
 			entry.disenchant = disenchant
 			entry.auction = not entry.bound and PC.Prices:GetAuctionPrice(entry.itemID) or nil
@@ -128,60 +129,31 @@ function Bags:Refresh()
 	end
 	local list = BuildList()
 	scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
-	footer:SetText(string.format("%d disenchantable item(s). Per item; %s>|r = pays most after the %d%% AH cut. "
-		.. "Disenchant: Auctionator's estimate.", #list, GOOD, math.floor(PC.db.settings.ahCut * 100 + 0.5)))
+	footer:SetText(string.format("%d item(s). Per item; %s>|r pays most after the %d%% AH cut. D/E: Auctionator est.",
+		#list, GOOD, math.floor(PC.db.settings.ahCut * 100 + 0.5)))
 end
 
 local function Header(text, offset)
 	local label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	label:SetPoint("TOPRIGHT", -(24 + offset), -32)
+	label:SetPoint("BOTTOMRIGHT", frame.Inset, "TOPRIGHT", -(18 + offset), 4)
 	label:SetWidth(VALUE_WIDTH)
 	label:SetJustifyH("RIGHT")
 	label:SetText(text)
 end
 
 local function Create()
-	frame = CreateFrame("Frame", "ProfitCraftBags", UIParent, "BasicFrameTemplateWithInset")
-	frame:SetSize(WIDTH, HEIGHT)
-	frame:SetPoint("CENTER")
-	frame:SetFrameStrata("HIGH")
-	frame:SetClampedToScreen(true)
-	frame:SetMovable(true)
-	frame:EnableMouse(true)
-	frame:RegisterForDrag("LeftButton")
-	frame:SetScript("OnDragStart", frame.StartMoving)
-	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-	frame.TitleText:SetText("ProfitCraft: Bags")
-	table.insert(UISpecialFrames, "ProfitCraftBags")
+	frame = PC:CreateWindow("ProfitCraftBags", UIParent, WIDTH, HEIGHT, "ProfitCraft: Bags", { movable = true })
 
 	local itemHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	itemHeader:SetPoint("TOPLEFT", 12, -32)
+	itemHeader:SetPoint("BOTTOMLEFT", frame.Inset, "TOPLEFT", 8, 4)
 	itemHeader:SetText("Item")
 	Header("Disenchant", 4 + 2 * VALUE_WIDTH)
 	Header("AH", 4 + VALUE_WIDTH)
 	Header("Vendor", 4)
 
-	footer = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	footer:SetPoint("BOTTOMLEFT", 12, 8)
-	footer:SetPoint("BOTTOMRIGHT", -12, 8)
-	footer:SetJustifyH("LEFT")
-	footer:SetHeight(24)
-
-	scrollBox = CreateFrame("Frame", nil, frame, "WowScrollBoxList")
-	scrollBox:SetPoint("TOPLEFT", 8, -48)
-	scrollBox:SetPoint("BOTTOMRIGHT", -24, 36)
-	local scrollBar = CreateFrame("EventFrame", nil, frame, "MinimalScrollBar")
-	scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 6, 0)
-	scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 6, 0)
-	local view = CreateScrollBoxListLinearView()
-	view:SetElementExtent(ROW_HEIGHT)
-	view:SetElementInitializer("Button", function(row, entry)
-		PC:Call("bags row", InitRow, row, entry)
-	end)
-	ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
-
+	footer = PC:CreateFooter(frame)
+	scrollBox = PC:CreateScrollList(frame, ROW_HEIGHT, "bags row", InitRow)
 	frame:SetScript("OnShow", function() PC:Call("bags show", Bags.Refresh, Bags) end)
-	frame:Hide()
 end
 
 PC:Listen("TOGGLE_BAGS", function()

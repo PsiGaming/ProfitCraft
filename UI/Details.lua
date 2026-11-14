@@ -2,7 +2,7 @@
 -- Shows the selected recipe's net profit and the cost of each reagent below the reagents in Blizzard's recipe
 -- details (ProfessionsFrame.CraftingPage.SchematicForm). Follows the selection by hooking the form's Init
 -- (hooksecurefunc: runs after Blizzard's code, changes nothing of it). Placed relative to Blizzard's
--- Reagents / OptionalReagents frames, not at fixed pixel offsets, and cut to fit the form (DESIGN.md section 7).
+-- frames, not at fixed pixel offsets, and cut to fit the form (DESIGN.md section 7).
 
 local _, PC = ...
 
@@ -51,16 +51,23 @@ end
 
 local HOW_LABEL = { vendor = "vendor", ah = "AH", ["ah-cheaper"] = "AH" }
 
--- Places the block below Blizzard's reagents, or below the optional reagents when the recipe has them
--- (Blizzard anchors OptionalReagents 20 px under Reagents). Returns how many lines fit above the form's bottom.
+-- The block sits at the bottom of the recipe details (above the Track Recipe line) and grows upward, so it
+-- never covers what Blizzard or other addons stack under the reagents (Auctionator adds "To Craft" and
+-- "Profit" lines there). Lines that don't fit between the reagents and the bottom are left out.
+local BOTTOM_OFFSET = 44     -- clears Blizzard's Track Recipe checkbox
+local RESERVED_BELOW = 36    -- room kept under the reagents for other addons' lines (Auctionator: 2 lines)
+
+-- Returns how many lines fit.
 local function Place()
 	local anchor = form.Reagents
 	if form.OptionalReagents and form.OptionalReagents:IsShown() then anchor = form.OptionalReagents end
+	local formLeft, formBottom = form:GetLeft(), form:GetBottom()
+	local left, anchorBottom = form.Reagents:GetLeft(), anchor:GetBottom()
 	block:ClearAllPoints()
-	block:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -8)
-	local anchorBottom, formBottom = anchor:GetBottom(), form:GetBottom()
+	block:SetPoint("BOTTOMLEFT", form, "BOTTOMLEFT", (left and formLeft) and (left - formLeft) or 20, BOTTOM_OFFSET)
 	if anchorBottom and formBottom then
-		return math.max(0, math.floor((anchorBottom - 8 - formBottom - 4) / LINE_HEIGHT))
+		local space = (anchorBottom - RESERVED_BELOW) - (formBottom + BOTTOM_OFFSET)
+		return math.max(0, math.floor(space / LINE_HEIGHT))
 	end
 	return MAX_LINES
 end
@@ -79,12 +86,12 @@ function Details:Update()
 	end
 	local rows = {}
 	if result.complete then
-		rows[#rows + 1] = { "|cffffd100Net profit per craft|r", PC:FormatMoney(result.profitCraft) }
+		rows[#rows + 1] = { "|cffffd100Net profit per craft|r", PC:FormatProfit(result.profitCraft) }
 	else
 		rows[#rows + 1] = { "|cffffd100Net profit per craft|r", "|cff888888missing prices|r" }
 	end
 	if result.profitDisenchant then
-		rows[#rows + 1] = { "|cffffd100Craft and disenchant|r", PC:FormatMoney(result.profitDisenchant) }
+		rows[#rows + 1] = { "|cffffd100Craft and disenchant|r", PC:FormatProfit(result.profitDisenchant) }
 	end
 	for _, reagent in ipairs(result.reagents) do
 		local label = reagent.quantity .. " x " .. PC.Items:GetName(reagent.itemID)

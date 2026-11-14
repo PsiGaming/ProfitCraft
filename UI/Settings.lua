@@ -28,22 +28,12 @@ local function Sync()
 end
 
 local function Create()
-	frame = CreateFrame("Frame", "ProfitCraftSettings", UIParent, "BasicFrameTemplateWithInset")
-	frame:SetSize(340, 60 + #OPTIONS * 30)
-	frame:SetPoint("CENTER")
-	frame:SetFrameStrata("HIGH")
-	frame:SetClampedToScreen(true)
-	frame:SetMovable(true)
-	frame:EnableMouse(true)
-	frame:RegisterForDrag("LeftButton")
-	frame:SetScript("OnDragStart", frame.StartMoving)
-	frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-	frame.TitleText:SetText("ProfitCraft Settings")
-	table.insert(UISpecialFrames, "ProfitCraftSettings")
+	frame = PC:CreateWindow("ProfitCraftSettings", UIParent, 360, 96 + #OPTIONS * 30, "ProfitCraft Settings",
+		{ movable = true })
 
 	for i, option in ipairs(OPTIONS) do
 		local box = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-		box:SetPoint("TOPLEFT", 14, -30 - (i - 1) * 30)
+		box:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 8, -6 - (i - 1) * 30)
 		box.Text:SetText(option.label)
 		box.Text:SetFontObject("GameFontHighlight")
 		box:SetScript("OnClick", function(self)
@@ -60,11 +50,10 @@ local function Create()
 	end
 
 	local version = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	version:SetPoint("BOTTOMRIGHT", -12, 10)
+	version:SetPoint("BOTTOMRIGHT", -12, 8)
 	version:SetText("ProfitCraft " .. PC.version)
 
 	frame:SetScript("OnShow", Sync)
-	frame:Hide()
 end
 
 PC:Listen("TOGGLE_SETTINGS", function()

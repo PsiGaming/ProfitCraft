@@ -27,6 +27,15 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] **Reagent bag free slots, off by default**: "(n)" on the reagent bag button, styled like Blizzard's backpack count. The normal bags use Forever's built-in "Show Free Bag Space" option (Options > Interface; one total on the backpack button), which Sylice uses for the normal bags (2026-11-13). Not checked: whether Blizzard's total also counts the reagent bag (if it does, the reagent slots are counted in both numbers).
 - [x] **Settings window brought forward from 0.3** (our own window, see Requirements): disenchant tooltip line, reagent bag free slots, debug mode. `/pcraft settings` or the side panel's "Settings" button.
 
+## Version 0.1-alpha.1 (fixes after Sylice's first test, 2026-11-13)
+
+- [x] Mode switch is a dropdown (Per craft / Per stack / Disenchant) instead of a cycling button.
+- [x] Windows use Blizzard's current frame style (ButtonFrameTemplate with portrait), like the profession window.
+- [x] Recipe-details block moved to the bottom of the recipe details, so it no longer overlaps Auctionator's "To Craft" / "Profit" lines under the reagents.
+- [x] A ProfitCraft tab at the bottom of the profession window's side-tab column shows/hides the panel (lit while open).
+- [x] Profitable amounts show a green "+" (losses already showed a red "-").
+- [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
+
 ## Version 0.2 (standalone: works without Auctionator)
 
 - [x] **Our own AH scan**, so ProfitCraft works without Auctionator (decided 2026-11-13). Also gives the listing detail Auctionator's API doesn't expose.
@@ -79,5 +88,6 @@ The deposit questions only matter for the "Listing deposit risk" item in "Later 
 - [ ] **The deposit above the 1s minimum** (item value? auction length?), and whether the 1s minimum changes to 1c (discussed by a developer, no patch note found).
 - [ ] **Is the AH cut 5% in Forever?** Web sources say yes; not yet confirmed in game.
 - [ ] **Can an addon ask Forever's AH what the deposit will be?** Check with an in-game command when building starts.
+- [ ] **Why Auctionator gave no disenchant values** in the first test: does Auctionator's own tooltip show a disenchant price for those items? If not, Auctionator has no Forever disenchant data and ProfitCraft needs its own table.
 - [ ] **Which Auctionator functions exist on Forever** (especially the price-age one)? Check in game when building starts.
 - [ ] **What unit is Auctionator's price age in** (`GetAuctionAgeByItemID`): whole days, or something finer? Decides how often the same-day tie rule applies. Check with `/dump` in game.

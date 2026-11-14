@@ -10,7 +10,8 @@ local function AddDisenchantLine(tooltip, tooltipData)
 	if tooltip ~= GameTooltip and tooltip ~= ItemRefTooltip then return end
 	local itemID = tooltipData and tooltipData.id
 	if type(itemID) ~= "number" then return end
-	local value = PC.Auctionator:GetDisenchantPrice(itemID)
+	local link = tooltip.GetItem and select(2, tooltip:GetItem()) or nil
+	local value = PC.Auctionator:GetDisenchantPrice(itemID, link)
 	if not value then return end
 	tooltip:AddDoubleLine("|cff4fc3f7Disenchant|r (Auctionator est.)", PC:FormatMoney(value))
 end

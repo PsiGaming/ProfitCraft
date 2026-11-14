@@ -18,7 +18,8 @@ local MODE_HELP = {
 		.. "(Auctionator's disenchant estimate).",
 }
 
-local frame, scrollBox, modeButton, statusText
+local frame, scrollBox, modeDropdown, statusText, toggleTab
+local UpdateToggleTab  -- defined below; used by the overview hooks in Create
 
 local function ShowRowTooltip(row)
 	local result = row.result
@@ -33,9 +34,9 @@ local function ShowRowTooltip(row)
 		GameTooltip:AddLine("Makes " .. recipe.quantityMin, 0.8, 0.8, 0.8)
 	end
 	if result.complete then
-		GameTooltip:AddDoubleLine("Profit per craft", PC:FormatMoney(result.profitCraft))
+		GameTooltip:AddDoubleLine("Profit per craft", PC:FormatProfit(result.profitCraft))
 		if result.stackSize and result.stackSize > 1 then
-			GameTooltip:AddDoubleLine("Profit per stack (" .. result.stackSize .. ")", PC:FormatMoney(result.profitStack))
+			GameTooltip:AddDoubleLine("Profit per stack (" .. result.stackSize .. ")", PC:FormatProfit(result.profitStack))
 		end
 		GameTooltip:AddDoubleLine("AH price per item", PC:FormatMoney(result.salePrice), 0.8, 0.8, 0.8)
 	end
@@ -43,7 +44,7 @@ local function ShowRowTooltip(row)
 		GameTooltip:AddDoubleLine("Reagent cost per craft", PC:FormatMoney(result.cost), 0.8, 0.8, 0.8)
 	end
 	if result.profitDisenchant then
-		GameTooltip:AddDoubleLine("Craft and disenchant", PC:FormatMoney(result.profitDisenchant))
+		GameTooltip:AddDoubleLine("Craft and disenchant", PC:FormatProfit(result.profitDisenchant))
 		GameTooltip:AddDoubleLine("  Disenchant estimate per item", PC:FormatMoney(result.disenchantValue), 0.8, 0.8, 0.8)
 	end
 	if #result.missing > 0 then
@@ -58,8 +59,8 @@ end
 
 local function ProfitText(result, mode)
 	if mode == "disenchant" then
-		if result.profitDisenchant then return PC:FormatMoney(result.profitDisenchant) end
-		if result.cost and not result.disenchantValue then return "|cff888888can't disenchant|r" end
+		if result.profitDisenchant then return PC:FormatProfit(result.profitDisenchant) end
+		if result.cost and not result.disenchantValue then return "|cff888888no D/E price|r" end
 		return "|cff888888no price|r"
 	end
 	if not result.complete then return "|cff888888no price|r" end
@@ -67,9 +68,9 @@ local function ProfitText(result, mode)
 		if not result.profitStack then return "|cff888888?|r" end
 		local size = result.stackSize or 1
 		local prefix = size > 1 and ("|cffaaaaaax" .. size .. "|r  ") or ""
-		return prefix .. PC:FormatMoney(result.profitStack)
+		return prefix .. PC:FormatProfit(result.profitStack)
 	end
-	return PC:FormatMoney(result.profitCraft)
+	return PC:FormatProfit(result.profitCraft)
 end
 
 local function InitRow(row, result)
@@ -105,7 +106,7 @@ end
 function Panel:Refresh()
 	if not (frame and frame:IsShown()) then return end
 	local mode = PC.db.settings.profitMode
-	modeButton:SetText(MODE_LABEL[mode] or mode)
+	modeDropdown:GenerateMenu()
 	local list = PC.Profit:GetRanked(mode)
 	scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
 	if not PC.Auctionator:IsAvailable() then
@@ -140,95 +141,106 @@ local function ShouldShow()
 		and not BookPageShown()
 end
 
+local function SmallButton(parent, width, text, tooltip, onClick)
+	local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	button:SetSize(width, 22)
+	button:SetText(text)
+	button:SetScript("OnClick", onClick)
+	button:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine(tooltip, 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	return button
+end
+
 local function Create()
-	frame = CreateFrame("Frame", "ProfitCraftPanel", ProfessionsFrame, "BasicFrameTemplateWithInset")
-	frame:SetSize(WIDTH, ProfessionsFrame:GetHeight())
+	frame = PC:CreateWindow("ProfitCraftPanel", ProfessionsFrame, WIDTH, ProfessionsFrame:GetHeight(), "ProfitCraft")
 	frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", TabColumnWidth() + 4, 0)
-	frame.TitleText:SetText("ProfitCraft")
 	frame.CloseButton:SetScript("OnClick", function()
 		PC:SetSetting("panelShown", false)
-		frame:Hide()
+		Panel:Update()
 	end)
 
-	modeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-	modeButton:SetSize(96, 22)
-	modeButton:SetPoint("TOPLEFT", 10, -28)
-	modeButton:SetScript("OnClick", function()
-		local current = PC.db.settings.profitMode
-		local nextMode = MODES[1]
-		for i, mode in ipairs(MODES) do
-			if mode == current then nextMode = MODES[i % #MODES + 1] end
+	-- Mode dropdown (Blizzard's current dropdown: WowStyle1DropdownTemplate + SetupMenu/CreateRadio).
+	modeDropdown = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
+	modeDropdown:SetWidth(104)
+	modeDropdown:SetPoint("TOPLEFT", 60, -30)
+	modeDropdown:SetupMenu(function(_, rootDescription)
+		for _, mode in ipairs(MODES) do
+			local option = rootDescription:CreateRadio(MODE_LABEL[mode],
+				function() return PC.db.settings.profitMode == mode end,
+				function() PC:SetSetting("profitMode", mode) end)
+			option:SetTooltip(function(tooltip)
+				GameTooltip_SetTitle(tooltip, MODE_LABEL[mode])
+				GameTooltip_AddNormalLine(tooltip, MODE_HELP[mode])
+			end)
 		end
-		PC:SetSetting("profitMode", nextMode)
 	end)
-	modeButton:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:AddLine(MODE_HELP[PC.db.settings.profitMode] or "", 1, 1, 1, true)
-		GameTooltip:AddLine("Click to switch: per craft, per stack, disenchant.", 0.5, 0.7, 1, true)
-		GameTooltip:Show()
-	end)
-	modeButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-	local bagsButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-	bagsButton:SetSize(70, 22)
-	bagsButton:SetPoint("TOPRIGHT", -10, -28)
-	bagsButton:SetText("Bags")
-	bagsButton:SetScript("OnClick", function() PC:Send("TOGGLE_BAGS") end)
-	bagsButton:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:AddLine("Disenchant value of the items in your bags.", 1, 1, 1, true)
-		GameTooltip:Show()
-	end)
-	bagsButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-	local settingsButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-	settingsButton:SetSize(70, 22)
+	local bagsButton = SmallButton(frame, 52, "Bags", "Disenchant value of the items in your bags.",
+		function() PC:Send("TOGGLE_BAGS") end)
+	bagsButton:SetPoint("TOPRIGHT", -8, -32)
+	local settingsButton = SmallButton(frame, 70, "Settings", "ProfitCraft settings.",
+		function() PC:Send("TOGGLE_SETTINGS") end)
 	settingsButton:SetPoint("RIGHT", bagsButton, "LEFT", -4, 0)
-	settingsButton:SetText("Settings")
-	settingsButton:SetScript("OnClick", function() PC:Send("TOGGLE_SETTINGS") end)
 
-	statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	statusText:SetPoint("BOTTOMLEFT", 12, 10)
-	statusText:SetPoint("BOTTOMRIGHT", -12, 10)
-	statusText:SetJustifyH("LEFT")
-	statusText:SetWordWrap(false)
-
-	scrollBox = CreateFrame("Frame", nil, frame, "WowScrollBoxList")
-	scrollBox:SetPoint("TOPLEFT", 8, -56)
-	scrollBox:SetPoint("BOTTOMRIGHT", -24, 28)
-	local scrollBar = CreateFrame("EventFrame", nil, frame, "MinimalScrollBar")
-	scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 6, 0)
-	scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 6, 0)
-	local view = CreateScrollBoxListLinearView()
-	view:SetElementExtent(ROW_HEIGHT)
-	view:SetElementInitializer("Button", function(row, result)
-		PC:Call("panel row", InitRow, row, result)
-	end)
-	ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
+	statusText = PC:CreateFooter(frame)
+	scrollBox = PC:CreateScrollList(frame, ROW_HEIGHT, "panel row", InitRow)
 
 	frame:SetScript("OnShow", function() PC:Call("panel show", Panel.Refresh, Panel) end)
 
 	-- Hide over the overview page, come back when it closes (HookScript adds to Blizzard's handlers).
 	if ProfessionsFrame.BookPage then
-		ProfessionsFrame.BookPage:HookScript("OnShow", function() frame:Hide() end)
+		ProfessionsFrame.BookPage:HookScript("OnShow", function() frame:Hide() UpdateToggleTab() end)
 		ProfessionsFrame.BookPage:HookScript("OnHide", function()
 			PC:Call("panel after overview", function() Panel:Update() end)
 		end)
 	end
 end
 
+-- A tab at the bottom of Forever's profession tab column that shows or hides the panel (same template and
+-- art as Blizzard's tabs: LargeSideTabButtonTemplate). Lit while the panel is open.
+local function CreateToggleTab()
+	toggleTab = CreateFrame("Frame", nil, ProfessionsFrame, "LargeSideTabButtonTemplate")
+	toggleTab:SetPoint("BOTTOMLEFT", ProfessionsFrame, "BOTTOMRIGHT", 0, 40)
+	toggleTab.Icon:SetTexture(PC.ICON)
+	toggleTab:SetFillToInterior(true)
+	toggleTab.tooltipText = "ProfitCraft"
+	toggleTab:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT", -4, -4)
+		GameTooltip:AddLine("ProfitCraft", 1, 1, 1)
+		GameTooltip:AddLine("Show or hide the profit list.", nil, nil, nil, true)
+		GameTooltip:Show()
+	end)
+	toggleTab:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	toggleTab:SetCustomOnMouseUpHandler(function(_, button, upInside)
+		if button == "LeftButton" and upInside ~= false then PC:Send("TOGGLE_PANEL") end
+	end)
+end
+
+function UpdateToggleTab()
+	if not toggleTab then return end
+	local onRecipes = PC.Recipes.isOpen and not BookPageShown()
+	toggleTab:SetShown(onRecipes)
+	toggleTab.SelectedTexture:SetShown(frame ~= nil and frame:IsShown())
+end
+
 -- Shows or hides the panel to match the current state.
 function Panel:Update()
+	if ProfessionsFrame and not toggleTab then CreateToggleTab() end
 	if not ShouldShow() then
 		if frame then frame:Hide() end
-		return
-	end
-	if not frame then Create() end
-	if frame:IsShown() then
-		self:Refresh()
 	else
-		frame:Show()  -- OnShow refreshes
+		if not frame then Create() end
+		if frame:IsShown() then
+			self:Refresh()
+		else
+			frame:Show()  -- OnShow refreshes
+		end
 	end
+	UpdateToggleTab()
 end
 
 PC:Listen("PROFESSION_OPENED", function() Panel:Update() end)
