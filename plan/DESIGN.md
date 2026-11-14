@@ -36,14 +36,14 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 |---|---|---|
 | `Core.lua` | Core | Namespace, one event frame that hands game events to the parts, a small message system (`PC:Send(msg, ...)` / `PC:Listen(msg, fn)`), debouncing, error log, money formatting (`FormatMoney`; `FormatProfit` adds a green "+" to gains), slash command |
 | `Data.lua` | Data | Loads `ProfitCraftDB`, fills default settings, runs version upgrades; `PC:SetSetting` announces `SETTINGS_CHANGED` |
-| `Sources/Auctionator.lua` | Source | Wraps Auctionator's public API (AH price, price age, merchant price); announces `PRICES_CHANGED` when Auctionator's data changes |
+| `Sources/Auctionator.lua` | Source | Wraps Auctionator's public API (AH price, price age, merchant price); announces `PRICES_CHANGED` when Auctionator's data changes and notes that time per realm (`ProfitCraftDB.lastScan`) |
 | `Sources/ItemData.lua` | Source | Names, icons, stack sizes and merchant sell prices from Blizzard's item data; requests missing item data once (items that fail to load are not requested again) |
 | `Disenchant.lua` | Prices | ProfitCraft's disenchant table (quality × armor/weapon × item level) and the average value of disenchanting one item, priced with AH prices (section 12) |
 | `Prices.lua` | Prices | One question for everyone: "what does item X cost / sell for?" Applies the rules in section 5 |
 | `Recipes.lua` | Recipes | Reads the open profession's learned recipes and reagents; announces `PROFESSION_OPENED`, `RECIPES_CHANGED`, `PROFESSION_CLOSED` |
 | `Profit.lua` | Profit | Calculates and stores one result per recipe; keeps a ranked list per mode |
 | `UI/Window.lua` | Window | Shared helpers: window in Blizzard's current frame style, scrolling list, footer |
-| `UI/Panel.lua` | Window | The side panel (ranked list) and the ProfitCraft side tab on the profession window |
+| `UI/Panel.lua` | Window | The side panel (ranked list) and the ProfitCraft side tab on the profession window; a warning banner above the list when Auctionator is missing, there are no AH prices, or the last scan is 48 hours old or more (Auctionator's whole-day price age until ProfitCraft has seen a scan) |
 | `UI/Details.lua` | Window | Profit block in Blizzard's recipe details |
 | `UI/Tooltip.lua` | Window | Disenchant line in item tooltips |
 | `UI/RecipeTooltip.lua` | Window | Cost and profit lines on trainer tooltips (Spell tooltip data, id = recipe ID) and recipe item tooltips (the ItemSpellTriggerLearn line's spellID = recipe ID); uses `Recipes:Load` and `Profit:Evaluate`. BoP products: no sale lines |
@@ -158,7 +158,7 @@ All windows use Blizzard's current templates (all present in the Forever source)
   - ProfitCraft's own movable window (`/pcraft settings`, or the panel's Settings button). Closing it just closes it: it never goes through Blizzard's settings panel, whose close always reopens the game menu (Forever source: `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`). Closes with Escape (`UISpecialFrames`).
   - The same page under Blizzard's Options > AddOns > ProfitCraft (`Settings.RegisterCanvasLayoutCategory` + `Settings.RegisterAddOnCategory`, Forever source). Closing that returns to the game menu, which is where the user came from.
 - Each page re-reads the values when shown and after any change (`SETTINGS_CHANGED`, and `CVAR_UPDATE` for the mirrored game setting), so the two never disagree.
-- Options (alpha.4): disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); free slots on the backpack button (mirrors Blizzard's `displayFreeBagSlots`, read and written with `C_CVar`); free slots on the reagent bag button (off); debug mode (off).
+- Options (beta.0), in three sections separated by divider lines: (1) price warning age slider and disenchant tooltip line, (2) the two bag free-slot options, (3) debug mode. Details: disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); price warning age (slider Off/1/2/3/4 days, default 2; Blizzard's `MinimalSliderWithSteppersTemplate`); free slots on the backpack button (mirrors Blizzard's `displayFreeBagSlots`, read and written with `C_CVar`); free slots on the reagent bag button (off); debug mode (off).
 
 ## 8. Slash command
 
@@ -194,6 +194,7 @@ Results from PsiLab (2026-11-13) are in `knowledge/forever-vs-vanilla.md`, "Addo
 - [x] Reading the ruleset: `GetRealmName()` = "CAMWOW US2 Realm 7 PvE" (ruleset at the end), `GetRealmID()` = 6933. PsiLab, 2026-11-13.
 - [x] All players of a ruleset share one AH (Sylice, 2026-11-13).
 - [x] ProfitCraft's windows, dropdown, side tab, settings in Blizzard's AddOns options and reagent bag count work in game (Sylice, alpha.1-alpha.2, 2026-11-13).
+- [x] Own disenchant estimate and material list, trainer and recipe item tooltips, BoP handling work in game (Sylice, alpha.4-alpha.5, 2026-11-14).
 - [ ] `GetAuctionAgeByItemID` unit: returned 0 for prices from the same day; check again the day after a scan (expected: 1).
 - [ ] AH cut on sale is 5%.
 - [ ] Is the AH shared between Horde and Alliance? Assumed not. Only matters for 0.2 (own scan data).

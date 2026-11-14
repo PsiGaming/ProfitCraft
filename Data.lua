@@ -12,6 +12,7 @@ local DEFAULT_SETTINGS = {
 	panelShown = true,    -- side panel open next to the profession window
 	tooltipDisenchant = false, -- disenchant estimate line in item tooltips (off by default, as in Auctionator)
 	reagentBagFreeSlots = false, -- free slots on the reagent bag button (off by default)
+	staleDays = 2,        -- side panel warns when AH prices are this many days old; 0 = off
 }
 
 -- upgrades[n] turns a version n-1 database into version n.
@@ -34,6 +35,7 @@ PC:RegisterEvent("ADDON_LOADED", function(name)
 	db.settings = type(db.settings) == "table" and db.settings or {}
 	FillDefaults(db.settings, DEFAULT_SETTINGS)
 	db.errors = type(db.errors) == "table" and db.errors or {}
+	db.lastScan = type(db.lastScan) == "table" and db.lastScan or {}  -- realm -> time of the last AH scan seen
 	ProfitCraftDB = db
 	PC.db = db
 	PC:Send("DATA_READY")

@@ -11,24 +11,50 @@
 
 local _, PC = ...
 
+-- In display order; { divider = true } draws a line between sections.
 local OPTIONS = {
+	{ key = "staleDays", slider = { min = 0, max = 4 }, label = "Warn when AH prices are older than",
+		help = "The side panel shows a banner asking you to scan the Auction House with Auctionator once prices "
+			.. "are this old. Off hides that warning (the \"Auctionator is required\" and \"No AH prices yet\" "
+			.. "warnings still show)." },
 	{ key = "tooltipDisenchant", label = "Disenchant estimate in item tooltips",
 		help = "Adds the estimated disenchant value (average over many disenchants, priced at AH prices) and "
 			.. "what the item can disenchant into to item tooltips. Not yet confirmed for Forever." },
+	{ divider = true },
 	-- Mirrors Blizzard's own "Show Free Bag Space" (Options > Interface): reads and writes the game setting
 	-- displayFreeBagSlots, which Blizzard's backpack button watches (CVAR_UPDATE). ProfitCraft stores nothing.
-	{ cvar = "displayFreeBagSlots", label = "Free slots on the backpack button (Blizzard)",
+	{ cvar = "displayFreeBagSlots", label = "Show free slots on the backpack",
 		help = "The same switch as Blizzard's \"Show Free Bag Space\" (Options > Interface): free slots in your "
 			.. "normal bags, shown on the backpack button. Changing it here changes Blizzard's option." },
-	{ key = "reagentBagFreeSlots", label = "Free slots on the reagent bag button",
+	{ key = "reagentBagFreeSlots", label = "Show free slots on the reagent bag",
 		help = "Shows the reagent bag's free slots on its bag bar button. For the normal bags, turn on Blizzard's "
 			.. "own \"Show Free Bag Space\" option (Options > Interface)." },
+	{ divider = true },
 	{ key = "debug", label = "Debug mode: show errors in chat",
 		help = "Errors are always logged (/pcraft errors). With debug mode on they are also printed in chat as "
 			.. "they happen." },
 }
 
 local ROW_SPACING = 30
+local SLIDER_ROWS = 2     -- a slider takes two rows: its label, then the slider
+local DIVIDER_ROWS = 0.5  -- a divider line takes half a row
+
+local function RowsUsed(option)
+	if option.divider then return DIVIDER_ROWS end
+	return option.slider and SLIDER_ROWS or 1
+end
+
+local function TotalRows()
+	local rows = 0
+	for _, option in ipairs(OPTIONS) do rows = rows + RowsUsed(option) end
+	return rows
+end
+
+local function DaysText(value)
+	value = math.floor(value + 0.5)
+	if value == 0 then return "Off" end
+	return value == 1 and "1 day" or (value .. " days")
+end
 
 local pages = {}  -- every page built, for syncing
 local window
@@ -46,37 +72,78 @@ local function SetValue(option, value)
 	end
 end
 
--- Makes the checkboxes reflect the saved settings (and Blizzard's, for mirrored ones).
+-- Makes the checkboxes and sliders reflect the saved settings (and Blizzard's, for mirrored ones).
 local function Sync(page)
 	for option, box in pairs(page.checkboxes) do box:SetChecked(GetValue(option)) end
+	for option, slider in pairs(page.sliders) do slider:SetValue(PC.db.settings[option.key]) end
 end
 
--- Builds one settings page (the checkboxes) inside `page`, starting at (x, y) from its top left.
+local function ShowHelp(owner, option)
+	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+	GameTooltip:AddLine(option.label, 1, 1, 1)
+	GameTooltip:AddLine(option.help, nil, nil, nil, true)
+	GameTooltip:Show()
+end
+
+-- A slider with arrow buttons (Blizzard's MinimalSliderWithSteppersTemplate, as in its own options; Forever
+-- source: Blizzard_SharedXML/Shared/Slider/MinimalSlider.lua), with its label on the row above and the value
+-- on its right.
+local function BuildSlider(page, option, x, y)
+	local label = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	label:SetPoint("TOPLEFT", x + 4, y - 6)
+	label:SetText(option.label)
+	local slider = CreateFrame("Frame", nil, page, "MinimalSliderWithSteppersTemplate")
+	slider:SetWidth(220)
+	slider:SetPoint("TOPLEFT", x + 8, y - ROW_SPACING + 4)
+	local range = option.slider
+	slider:Init(PC.db.settings[option.key], range.min, range.max, range.max - range.min,
+		{ [MinimalSliderWithSteppersMixin.Label.Right] = DaysText })
+	slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, value)
+		PC:Call("settings " .. option.key, PC.SetSetting, PC, option.key, math.floor(value + 0.5))
+	end, page)
+	slider.Slider:HookScript("OnEnter", function(self) ShowHelp(self, option) end)
+	slider.Slider:HookScript("OnLeave", function() GameTooltip:Hide() end)
+	return slider
+end
+
+local function BuildCheckbox(page, option, x, y)
+	local box = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
+	box:SetPoint("TOPLEFT", x, y)
+	box.Text:SetText(option.label)
+	box.Text:SetFontObject("GameFontHighlight")
+	box:SetScript("OnClick", function(self)
+		PC:Call("settings " .. (option.key or option.cvar), SetValue, option, self:GetChecked() and true or false)
+	end)
+	box:SetScript("OnEnter", function(self) ShowHelp(self, option) end)
+	box:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	return box
+end
+
+-- Builds one settings page (checkboxes and sliders) inside `page`, starting at (x, y) from its top left.
 local function BuildPage(page, x, y)
-	page.checkboxes = {}
-	for i, option in ipairs(OPTIONS) do
-		local box = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
-		box:SetPoint("TOPLEFT", x, y - (i - 1) * ROW_SPACING)
-		box.Text:SetText(option.label)
-		box.Text:SetFontObject("GameFontHighlight")
-		box:SetScript("OnClick", function(self)
-			PC:Call("settings " .. (option.key or option.cvar), SetValue, option, self:GetChecked() and true or false)
-		end)
-		box:SetScript("OnEnter", function(self)
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:AddLine(option.label, 1, 1, 1)
-			GameTooltip:AddLine(option.help, nil, nil, nil, true)
-			GameTooltip:Show()
-		end)
-		box:SetScript("OnLeave", function() GameTooltip:Hide() end)
-		page.checkboxes[option] = box
+	page.checkboxes, page.sliders = {}, {}
+	local row = 0
+	for _, option in ipairs(OPTIONS) do
+		local rowY = y - row * ROW_SPACING
+		row = row + RowsUsed(option)
+		if option.divider then
+			local line = page:CreateTexture(nil, "ARTWORK")
+			line:SetColorTexture(1, 1, 1, 0.15)
+			line:SetHeight(1)
+			line:SetWidth(300)
+			line:SetPoint("TOPLEFT", x + 4, rowY - ROW_SPACING * DIVIDER_ROWS / 2)
+		elseif option.slider then
+			page.sliders[option] = BuildSlider(page, option, x, rowY)
+		else
+			page.checkboxes[option] = BuildCheckbox(page, option, x, rowY)
+		end
 	end
 	page:HookScript("OnShow", Sync)
 	pages[#pages + 1] = page
 end
 
 local function CreateWindowPage()
-	window = PC:CreateWindow("ProfitCraftSettings", UIParent, 360, 96 + #OPTIONS * ROW_SPACING, "ProfitCraft Settings",
+	window = PC:CreateWindow("ProfitCraftSettings", UIParent, 360, 96 + TotalRows() * ROW_SPACING, "ProfitCraft Settings",
 		{ movable = true })
 	local page = CreateFrame("Frame", nil, window.Inset)
 	page:SetAllPoints()

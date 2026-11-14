@@ -41,6 +41,12 @@ function Source:GetAuctionAge(itemID)
 	return Ask("GetAuctionAgeByItemID", itemID)
 end
 
+-- Time (seconds, as time()) of the last Auctionator AH scan ProfitCraft saw on this realm, or nil if none yet.
+-- Recorded from RegisterForDBUpdate, which fires after each scan (PsiLab, 2026-11-13).
+function Source:GetLastScanTime()
+	return PC.db.lastScan[GetRealmName()]
+end
+
 -- Merchant buy price per item recorded by Auctionator at merchants, or nil. Can be fractional.
 function Source:GetVendorPrice(itemID)
 	return Ask("GetVendorPriceByItemID", itemID)
@@ -55,6 +61,7 @@ PC:RegisterEvent("PLAYER_LOGIN", function()
 	end
 	if type(api.RegisterForDBUpdate) == "function" then
 		local ok, err = pcall(api.RegisterForDBUpdate, CALLER_ID, function()
+			PC.db.lastScan[GetRealmName()] = time()
 			PC:Send("PRICES_CHANGED")
 		end)
 		if not ok then PC:ReportError("Auctionator RegisterForDBUpdate", err) end

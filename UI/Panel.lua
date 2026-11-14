@@ -18,7 +18,9 @@ local MODE_HELP = {
 		.. "(estimated disenchant value).",
 }
 
-local frame, scrollBox, modeDropdown, statusText, toggleTab
+local BANNER_HEIGHT = 44
+
+local frame, scrollBox, modeDropdown, statusText, toggleTab, banner
 local UpdateToggleTab  -- defined below; used by the overview hooks in Create
 
 local function ShowRowTooltip(row)
@@ -106,11 +108,61 @@ local function InitRow(row, result)
 	row.profit:SetText(ProfitText(result, PC.db.settings.profitMode))
 end
 
+-- Newest Auctionator price age (whole days, 0 = today) among the listed recipes' products and reagents, or nil
+-- when none of them has a price.
+local function NewestPriceAge(list)
+	local newest
+	local function Check(itemID)
+		local age = itemID and PC.Auctionator:GetAuctionAge(itemID)
+		if age and (not newest or age < newest) then newest = age end
+	end
+	for _, result in ipairs(list) do
+		Check(result.recipe.outputItemID)
+		for _, reagent in ipairs(result.reagents) do Check(reagent.itemID) end
+	end
+	return newest
+end
+
+local function OldPricesText(days)
+	return string.format("AH prices are %d %s old. Scan the Auction House with Auctionator to update them.", days,
+		days == 1 and "day" or "days")
+end
+
+-- The banner's text: Auctionator missing, no AH prices, or prices older than the staleDays setting (0 = that
+-- warning off); nil when all is well.
+local function PriceWarning(list)
+	if not PC.Auctionator:IsAvailable() then
+		return "Auctionator is required: ProfitCraft gets all its prices from it. Install Auctionator, then scan "
+			.. "the Auction House."
+	end
+	if #list == 0 then return nil end
+	local staleDays = PC.db.settings.staleDays
+	local lastScan = PC.Auctionator:GetLastScanTime()
+	if lastScan then
+		local hours = (time() - lastScan) / 3600
+		if staleDays == 0 or hours < staleDays * 24 then return nil end
+		return OldPricesText(math.floor(hours / 24))
+	end
+	-- No scan seen by ProfitCraft yet (e.g. just updated): fall back to Auctionator's price age in days.
+	local age = NewestPriceAge(list)
+	if not age then return "No AH prices yet. Scan the Auction House with Auctionator." end
+	if staleDays == 0 or age < staleDays then return nil end
+	return OldPricesText(age)
+end
+
+-- Shows the banner above the list (moving the list down) or hides it.
+local function UpdateBanner(text)
+	banner.text:SetText(text or "")
+	banner:SetShown(text ~= nil)
+	scrollBox:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4, text and -(BANNER_HEIGHT + 8) or -4)
+end
+
 function Panel:Refresh()
 	if not (frame and frame:IsShown()) then return end
 	local mode = PC.db.settings.profitMode
 	modeDropdown:GenerateMenu()
 	local list = PC.Profit:GetRanked(mode)
+	UpdateBanner(PriceWarning(list))
 	scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
 	if not PC.Auctionator:IsAvailable() then
 		statusText:SetText("|cffff8888Auctionator not found: no prices.|r")
@@ -191,6 +243,22 @@ local function Create()
 
 	statusText = PC:CreateFooter(frame)
 	scrollBox = PC:CreateScrollList(frame, ROW_HEIGHT, "panel row", InitRow)
+
+	-- Warning banner at the top of the list (Auctionator missing, no prices, old prices).
+	banner = CreateFrame("Frame", nil, frame)
+	banner:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4, -4)
+	banner:SetPoint("TOPRIGHT", frame.Inset, "TOPRIGHT", -4, -4)
+	banner:SetHeight(BANNER_HEIGHT)
+	local background = banner:CreateTexture(nil, "BACKGROUND")
+	background:SetAllPoints()
+	background:SetColorTexture(0.45, 0.1, 0.05, 0.85)
+	banner.text = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	banner.text:SetPoint("TOPLEFT", 8, -6)
+	banner.text:SetPoint("BOTTOMRIGHT", -8, 6)
+	banner.text:SetJustifyH("LEFT")
+	banner.text:SetJustifyV("MIDDLE")
+	banner.text:SetWordWrap(true)
+	banner:Hide()
 
 	frame:SetScript("OnShow", function() PC:Call("panel show", Panel.Refresh, Panel) end)
 
@@ -311,6 +379,9 @@ PC:Listen("TOGGLE_PANEL", function()
 end)
 
 PC:Listen("RESULTS_CHANGED", function() Panel:Refresh() end)
+PC:Listen("SETTINGS_CHANGED", function(key)
+	if key == "staleDays" then Panel:Refresh() end
+end)
 PC:Listen("SETTINGS_CHANGED", function(key)
 	if key == "profitMode" then Panel:Refresh() end
 end)

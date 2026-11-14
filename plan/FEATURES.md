@@ -16,8 +16,8 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] **Vendor prices.** A reagent costs the **lower** of its merchant buy price (Auctionator's recorded price) and its AH price; with no merchant price known, the AH price is used; with neither, it is "missing". (Decided 2026-11-13; the reagent lines show "vendor" or "AH".) Sell price (what a merchant pays): Blizzard's item data (`sellPrice` from `C_Item.GetItemInfo`), used in the bag window.
 - [x] **Fast by design:** prices are calculated once, and again only when prices or recipes change. Sorting, filtering, scrolling and searching only re-read the saved results.
 - [x] **Slash command `/pcraft`.** (Decided 2026-11-13.)
-- [x] **Disenchanting** (added 2026-11-13), using **Auctionator's disenchant estimate** (`GetDisenchantPriceByItemID`; its disenchant rules are not verified for Forever, so values are labelled as Auctionator's estimate):
-  - **Item tooltips:** a "Disenchant (Auctionator est.)" line; `/pcraft tooltip on|off` (checkbox in the settings window from 0.3).
+- [x] **Disenchanting** (added 2026-11-13). First used Auctionator's disenchant estimate, which is empty on Forever; since alpha.4 ProfitCraft's own estimate (`Disenchant.lua`, DESIGN.md section 12):
+  - **Item tooltips:** a "Disenchant (est.)" line with the possible materials; off by default; `/pcraft tooltip on|off` or the settings window.
   - **Bag window** (`/pcraft bags`, or "Bags" in the side panel): every disenchantable item in your bags with its disenchant estimate, AH price and merchant price per item; the option that pays most after the AH cut is marked. Soulbound items have no AH option.
   - **Craft and disenchant:** a third side-panel mode, "Disenchant", ranks recipes by crafting and disenchanting the product (estimate × quantity × (1 − AH cut) − reagent cost); also shown in the row tooltip and the recipe details.
 - [x] **Debug mode, off by default.** Errors never pop up while playing; they are always written to a small error log. With debug mode on, they are also shown in chat. `/pcraft debug on|off` in 0.1, plus a checkbox in the settings window from 0.3; `/pcraft errors` shows the log. (Decided 2026-11-13.)
@@ -36,14 +36,19 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
 
-## Version 0.1-alpha.5 (built 2026-11-14)
+## Version 0.1-beta.0 (in progress, 2026-11-14; 0.1 is feature-complete, so betas get fixes only and new features go to 0.2)
+
+- [x] **Price warning banner** at the top of the side panel's list: Auctionator not installed ("required"), no AH prices yet, or prices 48 hours old or more ("scan the AH with Auctionator"). ProfitCraft notes the time of each Auctionator scan per realm (Auctionator's DB-update callback); until it has seen one, it falls back to Auctionator's price age in whole days.
+- [x] **Setting: how old prices may get before the banner warns**, a slider in the settings window: Off, 1, 2 (default), 3, 4 days. Whole days only, because Auctionator's price age counts whole days (Sylice, 2026-11-14). Off only hides the old-prices warning; "Auctionator is required" and "No AH prices yet" still show.
+
+## Version 0.1-alpha.5 (2026-11-14; all confirmed working in game by Sylice, 2026-11-14)
 
 - [x] Disenchant tooltip also lists what the item can disenchant into (chance, amount, material), like Auctionator's breakdown; with "?" as the value when a material has no AH price.
 - [x] Trainer tooltips: hovering a recipe at a trainer shows reagent cost, AH price of the product, profit per craft and craft-and-disenchant, to decide whether it is worth training.
 - [x] Recipe item tooltips (bags, AH, chat links): the same lines, to decide whether to learn, train or sell the recipe.
 - [x] Bind-on-pickup products show "can't be sold" / "BoP" instead of an AH price and sale profit, in the new tooltips, the side panel and the recipe details; craft-and-disenchant is still shown.
 
-## Version 0.1-alpha.4 (2026-11-13)
+## Version 0.1-alpha.4 (2026-11-13; disenchant values confirmed working in game by Sylice, 2026-11-14)
 
 - [x] ProfitCraft's own disenchant estimate (`Disenchant.lua`): its own table by quality, armor/weapon and item level, priced with AH prices; replaces Auctionator's disenchant lookup, which is empty on Forever. Used by the tooltip line, D/E Bags and the Disenchant mode. Shown as an estimate until confirmed for Forever.
 - [x] Essences count at whichever form sells for more (3 lesser = 1 greater, both ways).
