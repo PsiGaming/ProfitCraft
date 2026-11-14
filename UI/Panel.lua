@@ -39,6 +39,8 @@ local function ShowRowTooltip(row)
 			GameTooltip:AddDoubleLine("Profit per stack (" .. result.stackSize .. ")", PC:FormatProfit(result.profitStack))
 		end
 		GameTooltip:AddDoubleLine("AH price per item", PC:FormatMoney(result.salePrice), 0.8, 0.8, 0.8)
+	elseif result.bound then
+		GameTooltip:AddLine("Bind on pickup: can't be sold", 0.8, 0.8, 0.8)
 	end
 	if result.cost then
 		GameTooltip:AddDoubleLine("Reagent cost per craft", PC:FormatMoney(result.cost), 0.8, 0.8, 0.8)
@@ -63,6 +65,7 @@ local function ProfitText(result, mode)
 		if result.cost and not result.disenchantValue then return "|cff888888no D/E price|r" end
 		return "|cff888888no price|r"
 	end
+	if result.bound then return "|cff888888BoP|r" end
 	if not result.complete then return "|cff888888no price|r" end
 	if mode == "stack" then
 		if not result.profitStack then return "|cff888888?|r" end

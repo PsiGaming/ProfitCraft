@@ -87,6 +87,8 @@ function Details:Update()
 	local rows = {}
 	if result.complete then
 		rows[#rows + 1] = { "|cffffd100Net profit per craft|r", PC:FormatProfit(result.profitCraft) }
+	elseif result.bound then
+		rows[#rows + 1] = { "|cffffd100Net profit per craft|r", "|cff888888BoP: can't be sold|r" }
 	else
 		rows[#rows + 1] = { "|cffffd100Net profit per craft|r", "|cff888888missing prices|r" }
 	end
@@ -103,7 +105,7 @@ function Details:Update()
 		end
 		rows[#rows + 1] = { label, value }
 	end
-	if not result.salePrice and result.recipe.outputItemID then
+	if not result.salePrice and not result.bound and result.recipe.outputItemID then
 		rows[#rows + 1] = { "|cffff8888No AH price for the product|r" }
 	end
 	while #rows > maxLines do table.remove(rows) end

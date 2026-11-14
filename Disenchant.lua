@@ -126,12 +126,16 @@ local function MaterialPrice(itemID)
 	return own or other
 end
 
+local function RowFor(itemID, itemLink)
+	local _, _, quality, itemLevel, _, _, _, _, _, _, _, classID = C_Item.GetItemInfo(itemLink or itemID)
+	return FindRow(quality, classID, itemLevel)
+end
+
 -- Average AH value in copper of disenchanting one item (before the AH cut), or nil: not disenchantable, item
 -- data not loaded yet, outside the table, or a material without a known price.
 -- Pass the exact link when there is one (bag slot, tooltip).
 function Disenchant:GetValue(itemID, itemLink)
-	local _, _, quality, itemLevel, _, _, _, _, _, _, _, classID = C_Item.GetItemInfo(itemLink or itemID)
-	local row = FindRow(quality, classID, itemLevel)
+	local row = RowFor(itemID, itemLink)
 	if not row then return nil end
 	local value = 0
 	for i = 3, #row do
@@ -141,4 +145,14 @@ function Disenchant:GetValue(itemID, itemLink)
 		value = value + price * chance / 100 * (low + high) / 2
 	end
 	return math.floor(value + 0.5)
+end
+
+-- What the item can disenchant into: a list of { itemID, chance %, min amount, max amount }, or nil.
+-- Doesn't need prices.
+function Disenchant:GetOutcomes(itemID, itemLink)
+	local row = RowFor(itemID, itemLink)
+	if not row then return nil end
+	local list = {}
+	for i = 3, #row do list[#list + 1] = row[i] end
+	return list
 end

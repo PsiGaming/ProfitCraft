@@ -39,6 +39,17 @@ function Items:GetSellPrice(itemID)
 	return sellPrice or 0
 end
 
+-- Enum.ItemBind (Forever API docs): 1 = bind on pickup, 4 = quest item. Neither can be sold on the AH.
+local BIND_ON_PICKUP, BIND_QUEST = 1, 4
+
+-- True when the item binds on pickup (or is a quest item): it can't be sold on the AH, only disenchanted.
+-- False while the item data isn't loaded yet.
+function Items:IsBindOnPickup(itemID)
+	if not Info(itemID) then return false end
+	local bindType = select(14, C_Item.GetItemInfo(itemID))
+	return bindType == BIND_ON_PICKUP or bindType == BIND_QUEST
+end
+
 function Items:GetIcon(itemID)
 	local name, _, icon = Info(itemID)
 	return name and icon or nil

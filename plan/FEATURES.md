@@ -36,6 +36,13 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
 
+## Version 0.1-alpha.5 (built 2026-11-14)
+
+- [x] Disenchant tooltip also lists what the item can disenchant into (chance, amount, material), like Auctionator's breakdown; with "?" as the value when a material has no AH price.
+- [x] Trainer tooltips: hovering a recipe at a trainer shows reagent cost, AH price of the product, profit per craft and craft-and-disenchant, to decide whether it is worth training.
+- [x] Recipe item tooltips (bags, AH, chat links): the same lines, to decide whether to learn, train or sell the recipe.
+- [x] Bind-on-pickup products show "can't be sold" / "BoP" instead of an AH price and sale profit, in the new tooltips, the side panel and the recipe details; craft-and-disenchant is still shown.
+
 ## Version 0.1-alpha.4 (2026-11-13)
 
 - [x] ProfitCraft's own disenchant estimate (`Disenchant.lua`): its own table by quality, armor/weapon and item level, priced with AH prices; replaces Auctionator's disenchant lookup, which is empty on Forever. Used by the tooltip line, D/E Bags and the Disenchant mode. Shown as an estimate until confirmed for Forever.

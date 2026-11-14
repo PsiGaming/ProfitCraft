@@ -14,6 +14,7 @@ local ranked = {}     -- mode -> sorted list of results
 
 -- A result:
 --   recipe, complete (all prices known), missing (item IDs without a price),
+--   bound (the product binds on pickup: never sold, so no sale profit; craft-and-disenchant still counts),
 --   quantity (items per craft; the average for a random range), salePrice (AH price per item),
 --   cost (reagent cost per craft), reagents ({ itemID, quantity, unit, total, how }),
 --   profitCraft, profitItem, stackSize, profitStack (nil when not computable),
@@ -47,8 +48,11 @@ local function Evaluate(recipe, cut)
 
 	local outputItemID = recipe.outputItemID
 	if outputItemID then
-		result.salePrice = PC.Prices:GetAuctionPrice(outputItemID)
-		if not result.salePrice then
+		result.bound = PC.Items:IsBindOnPickup(outputItemID)
+		result.salePrice = not result.bound and PC.Prices:GetAuctionPrice(outputItemID) or nil
+		if result.bound then
+			complete = false  -- can't be sold: no sale profit, only craft-and-disenchant
+		elseif not result.salePrice then
 			complete = false
 			table.insert(result.missing, 1, outputItemID)
 		end
@@ -69,6 +73,11 @@ local function Evaluate(recipe, cut)
 		result.profitDisenchant = result.disenchantValue * result.quantity * (1 - cut) - result.cost
 	end
 	return result
+end
+
+-- One recipe's result with the current AH cut (for tooltips, outside the stored results).
+function Profit:Evaluate(recipe)
+	return Evaluate(recipe, PC.db.settings.ahCut)
 end
 
 local PROFIT_FIELD = { craft = "profitCraft", stack = "profitStack", disenchant = "profitDisenchant" }

@@ -46,6 +46,7 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 | `UI/Panel.lua` | Window | The side panel (ranked list) and the ProfitCraft side tab on the profession window |
 | `UI/Details.lua` | Window | Profit block in Blizzard's recipe details |
 | `UI/Tooltip.lua` | Window | Disenchant line in item tooltips |
+| `UI/RecipeTooltip.lua` | Window | Cost and profit lines on trainer tooltips (Spell tooltip data, id = recipe ID) and recipe item tooltips (the ItemSpellTriggerLearn line's spellID = recipe ID); uses `Recipes:Load` and `Profit:Evaluate`. BoP products: no sale lines |
 | `UI/Bags.lua` | Window | "D/E Bags": disenchantable items in the bags with disenchant / AH / merchant values |
 | `UI/BagSpace.lua` | Window | Free-slot count on the reagent bag button |
 | `UI/Settings.lua` | Window | The settings page, shown in our own window and in Blizzard's Options > AddOns |

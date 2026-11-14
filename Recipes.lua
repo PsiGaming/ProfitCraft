@@ -43,23 +43,30 @@ local function ReadReagents(schematic)
 	return reagents
 end
 
+-- One recipe in ProfitCraft's form, or nil. Also works with no profession window open, for learned and unlearned
+-- recipes of the character's professions (PsiLab, 2026-11-14); `info` is optional (name and icon).
+function Recipes:Load(recipeID, info)
+	local schematic = C_TradeSkillUI.GetRecipeSchematic(recipeID, false)
+	if not schematic then return nil end
+	return {
+		recipeID = recipeID,
+		name = (info and info.name) or schematic.name or ("recipe " .. recipeID),
+		icon = (info and info.icon) or schematic.icon,
+		outputItemID = schematic.outputItemID,
+		quantityMin = schematic.quantityMin or 1,
+		quantityMax = schematic.quantityMax or schematic.quantityMin or 1,
+		reagents = ReadReagents(schematic),
+	}
+end
+
 function Recipes:Read()
 	local profession = C_TradeSkillUI.GetBaseProfessionInfo()
 	local list, byID, ids = {}, {}, {}
 	for _, recipeID in ipairs(AllRecipeIDs()) do
 		local info = C_TradeSkillUI.GetRecipeInfo(recipeID)
 		if info and info.learned then
-			local schematic = C_TradeSkillUI.GetRecipeSchematic(recipeID, false)
-			if schematic then
-				local recipe = {
-					recipeID = recipeID,
-					name = info.name or schematic.name or ("recipe " .. recipeID),
-					icon = info.icon or schematic.icon,
-					outputItemID = schematic.outputItemID,
-					quantityMin = schematic.quantityMin or 1,
-					quantityMax = schematic.quantityMax or schematic.quantityMin or 1,
-					reagents = ReadReagents(schematic),
-				}
+			local recipe = self:Load(recipeID, info)
+			if recipe then
 				list[#list + 1] = recipe
 				byID[recipeID] = recipe
 				ids[#ids + 1] = recipeID
