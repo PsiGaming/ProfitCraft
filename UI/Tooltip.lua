@@ -1,5 +1,5 @@
 -- ProfitCraft: item tooltip
--- Adds Auctionator's disenchant estimate to item tooltips (on by default; /pcraft tooltip on|off).
+-- Adds ProfitCraft's disenchant estimate to item tooltips (off by default; /pcraft tooltip on|off).
 -- Uses Blizzard's TooltipDataProcessor post-call for item tooltips, as Blizzard's own code does; the item ID
 -- is tooltipData.id (Forever source: Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua).
 
@@ -11,9 +11,9 @@ local function AddDisenchantLine(tooltip, tooltipData)
 	local itemID = tooltipData and tooltipData.id
 	if type(itemID) ~= "number" then return end
 	local link = tooltip.GetItem and select(2, tooltip:GetItem()) or nil
-	local value = PC.Auctionator:GetDisenchantPrice(itemID, link)
+	local value = PC.Disenchant:GetValue(itemID, link)
 	if not value then return end
-	tooltip:AddDoubleLine("|cff4fc3f7Disenchant|r (Auctionator est.)", PC:FormatMoney(value))
+	tooltip:AddDoubleLine("|cff4fc3f7Disenchant|r (est.)", PC:FormatMoney(value))
 end
 
 if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum.TooltipDataType then

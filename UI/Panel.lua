@@ -15,7 +15,7 @@ local MODE_HELP = {
 	craft = "Profit of one craft, selling the product on the AH.",
 	stack = "Profit of one full stack of the product, selling it on the AH.",
 	disenchant = "Profit of one craft if you disenchant the product and sell the materials "
-		.. "(Auctionator's disenchant estimate).",
+		.. "(estimated disenchant value).",
 }
 
 local frame, scrollBox, modeDropdown, statusText, toggleTab

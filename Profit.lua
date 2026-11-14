@@ -17,7 +17,7 @@ local ranked = {}     -- mode -> sorted list of results
 --   quantity (items per craft; the average for a random range), salePrice (AH price per item),
 --   cost (reagent cost per craft), reagents ({ itemID, quantity, unit, total, how }),
 --   profitCraft, profitItem, stackSize, profitStack (nil when not computable),
---   disenchantValue (Auctionator's estimate per item), profitDisenchant (craft, then disenchant and sell the
+--   disenchantValue (ProfitCraft's disenchant estimate per item), profitDisenchant (craft, then disenchant and sell the
 --   materials: estimate x quantity x (1 - AH cut) - cost; nil when not disenchantable or not computable)
 local function Evaluate(recipe, cut)
 	local result = { recipe = recipe, missing = {}, reagents = {} }
@@ -53,7 +53,7 @@ local function Evaluate(recipe, cut)
 			table.insert(result.missing, 1, outputItemID)
 		end
 		result.stackSize = PC.Items:GetStackSize(outputItemID)
-		result.disenchantValue = PC.Auctionator:GetDisenchantPrice(outputItemID)
+		result.disenchantValue = PC.Disenchant:GetValue(outputItemID)
 	else
 		complete = false
 		result.noProduct = true

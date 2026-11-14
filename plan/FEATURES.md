@@ -36,6 +36,12 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
 
+## Version 0.1-alpha.4 (2026-11-13)
+
+- [x] ProfitCraft's own disenchant estimate (`Disenchant.lua`): its own table by quality, armor/weapon and item level, priced with AH prices; replaces Auctionator's disenchant lookup, which is empty on Forever. Used by the tooltip line, D/E Bags and the Disenchant mode. Shown as an estimate until confirmed for Forever.
+- [x] Essences count at whichever form sells for more (3 lesser = 1 greater, both ways).
+- [x] The disenchant line in item tooltips is off by default for new installs (as in Auctionator).
+
 ## Version 0.1-alpha.3 (2026-11-13)
 
 - [x] ProfitCraft's side tab takes the next free slot **from the bottom** of the profession window's right edge (bottom slot 10 px up, like What's Training's; moves up above any other addon's frame already in that column), instead of under Blizzard's profession tabs.
@@ -55,7 +61,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 
 ## Requirements (apply to every version)
 
-- **Works fully without Auctionator** (from 0.2 on; disenchant estimates stay Auctionator-only until ProfitCraft has its own Forever-verified disenchant table; 0.1 only loads cleanly without it and says it has no price source). ProfitCraft is a standalone addon; Auctionator is an optional, recommended source (`## OptionalDeps: Auctionator` in the `.toc`, so it loads first when installed, never `## Dependencies`). Auctionator's data is used when available. (Decided 2026-11-13.)
+- **Works fully without Auctionator** (from 0.2 on; disenchant estimates use ProfitCraft's own table from alpha.4 but still need Auctionator's AH prices until 0.2; 0.1 only loads cleanly without it and says it has no price source). ProfitCraft is a standalone addon; Auctionator is an optional, recommended source (`## OptionalDeps: Auctionator` in the `.toc`, so it loads first when installed, never `## Dependencies`). Auctionator's data is used when available. (Decided 2026-11-13.)
 - **Closing the settings must not open the game menu.** ProfitCraft's own commands and buttons open its own settings window, never Blizzard's settings panel (decided 2026-11-13). The same settings page is also listed in Blizzard's Options > AddOns, for people who look there; closing that one returns to the game menu, which is where they came from. Cause: Blizzard's settings panel always reopens the game menu when it is closed (Forever UI source, `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`, called by both the Close button and Escape).
 
 ## Version 0.3

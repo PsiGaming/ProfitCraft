@@ -41,18 +41,6 @@ function Source:GetAuctionAge(itemID)
 	return Ask("GetAuctionAgeByItemID", itemID)
 end
 
--- Auctionator's estimate of what disenchanting the item yields, in copper, or nil (not disenchantable or
--- unknown). Auctionator's disenchant rules are not verified for Forever; shown as Auctionator's estimate.
--- Tries the item ID first, then the item link (an estimate can depend on item details such as item level),
--- passing the exact link when the caller has one (e.g. a bag slot or tooltip).
-function Source:GetDisenchantPrice(itemID, itemLink)
-	local value = Ask("GetDisenchantPriceByItemID", itemID)
-	if value then return value end
-	itemLink = itemLink or select(2, C_Item.GetItemInfo(itemID))
-	if itemLink then return Ask("GetDisenchantPriceByItemLink", itemLink) end
-	return nil
-end
-
 -- Merchant buy price per item recorded by Auctionator at merchants, or nil. Can be fractional.
 function Source:GetVendorPrice(itemID)
 	return Ask("GetVendorPriceByItemID", itemID)

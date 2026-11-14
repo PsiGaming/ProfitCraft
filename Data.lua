@@ -10,7 +10,7 @@ local DEFAULT_SETTINGS = {
 	profitMode = "craft", -- side panel: "craft", "stack" (per full stack) or "disenchant" (craft, then disenchant)
 	ahCut = 0.05,         -- share of the sale price the AH keeps (web sources: 5%; to confirm in game)
 	panelShown = true,    -- side panel open next to the profession window
-	tooltipDisenchant = true, -- disenchant estimate line in item tooltips
+	tooltipDisenchant = false, -- disenchant estimate line in item tooltips (off by default, as in Auctionator)
 	reagentBagFreeSlots = false, -- free slots on the reagent bag button (off by default)
 }
 

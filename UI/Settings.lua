@@ -13,7 +13,8 @@ local _, PC = ...
 
 local OPTIONS = {
 	{ key = "tooltipDisenchant", label = "Disenchant estimate in item tooltips",
-		help = "Adds Auctionator's disenchant estimate to item tooltips." },
+		help = "Adds the estimated disenchant value to item tooltips (average over many disenchants, "
+			.. "priced at AH prices). Not yet confirmed for Forever." },
 	-- Mirrors Blizzard's own "Show Free Bag Space" (Options > Interface): reads and writes the game setting
 	-- displayFreeBagSlots, which Blizzard's backpack button watches (CVAR_UPDATE). ProfitCraft stores nothing.
 	{ cvar = "displayFreeBagSlots", label = "Free slots on the backpack button (Blizzard)",

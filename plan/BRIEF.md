@@ -4,17 +4,16 @@ Read this first, then `plan/FEATURES.md` and `plan/DESIGN.md`. Project-wide rule
 
 ## Where things stand
 - ProfitCraft is public at github.com/PsiGaming/ProfitCraft (MIT). Released as GitHub pre-releases: 0.1-alpha.0, alpha.1, alpha.2, alpha.3 (alpha.3 published at the end of this session). Sylice and friends install via WowUp. Zip name `ProfitCraft-v<version>-forever.zip`, built with `git archive --prefix=ProfitCraft/` (the `plan/` folder is excluded via `.gitattributes`).
-- Everything Sylice reported after testing alpha.0-alpha.2 is fixed, **except disenchant values** (see below).
+- Everything Sylice reported after testing alpha.0-alpha.2 is fixed; disenchant values are rebuilt for alpha.4 (below).
 - Version scheme: Sylice decides when a version number changes. Don't publish without Sylice's go-ahead.
 
-## Next task: disenchant values
-Full findings and plan: `plan/DESIGN.md` section 12. Short version:
-- Auctionator's disenchant API returns nothing on Forever (its D/E support covers only later expansions). Sylice decided: no separate addon; ProfitCraft builds its own estimate.
-- Approach: own disenchant table (quality × armor/weapon × level → materials, chance, quantity), priced with Auctionator's AH prices. Disenchant Buddy (`addons/reference/DisenchantBuddy`, GPLv3) shows the approach works but treats Forever as Classic; study it, never copy its code.
-- First open question: item level vs required level. Settle with Sylice's Enchanting alt, ideally by adding a disenchant recorder module to PsiLab (`addons/dev/PsiLab`, public at PsiGaming/PsiLab).
+## Current work: 0.1-alpha.4 (own disenchant estimate; version set by Sylice), built 2026-11-13, not yet released
+- `Disenchant.lua`: ProfitCraft's own table (quality × armor/weapon × item level, Classic data cross-checked across the wiki and two addons) priced with Auctionator's AH prices; replaces Auctionator's disenchant lookup, which is empty on Forever because Auctionator treats Forever as Retail. Details: `plan/DESIGN.md` section 12.
+- Tooltip disenchant line now off by default for new installs (as in Auctionator); existing installs keep their saved choice.
+- Test harness: 73 checks pass (with and without Auctionator).
+- Next: Sylice tests in game, then publish on Sylice's go-ahead (tag `v0.1-alpha.4`, zip `ProfitCraft-v0.1-alpha.4-forever.zip`, GitHub pre-release). Open check: a green weapon of item level 21-30 should give Greater Magic Essence.
 
 ## How we work
-- **Never read Auctionator's code** (its authors asked AI tools not to; Sylice asked me to anyway and I declined). Use only its public API (`Auctionator.API.v1.*`) and in-game tests. Don't bring the subject up in plan documents.
 - Evidence for Forever API facts: Blizzard's Forever UI source (Gethe/wow-ui-source, branch `forever`; shallow clone ~54 MB into /tmp) and PsiLab results; reference addons are idea sources, not proof.
 - Tests: LuaJIT via `lupa` in a temp venv (`uv venv /tmp/luachk && uv pip install --python /tmp/luachk/bin/python lupa`) with stubbed WoW functions. The test harness lived in `/tmp/pcraft-test/` (`harness.lua`, `run.py`) and will be gone after a reboot; recreate it rather than skipping tests (it simulated login, opening a profession, prices from a fake Auctionator, all windows and settings; 64 checks at alpha.3).
 - Sylice reviews uncommitted changes in Claude Code's `/diff` (open Claude Code in the addon's folder). New files: `git add -N`.

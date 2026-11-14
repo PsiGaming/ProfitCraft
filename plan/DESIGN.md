@@ -1,6 +1,6 @@
 # ProfitCraft: design
 
-How ProfitCraft is built. **What** it does is in `FEATURES.md`; this file is the **how**. Matches version 0.1-alpha.3 (2026-11-13); sections marked "milestone 2" or "later" are not built yet.
+How ProfitCraft is built. **What** it does is in `FEATURES.md`; this file is the **how**. Matches version 0.1-alpha.4 (2026-11-13); sections marked "milestone 2" or "later" are not built yet.
 
 Target: World of Warcraft: Forever, `## Interface: 16001`. API facts marked **(Forever source)** were checked in Blizzard's own Forever UI code (Gethe/wow-ui-source, branch `forever`, build 1.60.1 (70938)); **(PsiLab)** means confirmed in game with PsiLab; **(check in game)** means not confirmed yet.
 
@@ -20,7 +20,7 @@ These follow from the problems found in ForeverProfit and CraftProfit; the full 
 
 | Milestone | Version | Contents | Price sources |
 |---|---|---|---|
-| 1 | 0.1 | "Version 0.1" and its alphas in `FEATURES.md`; next: own disenchant estimate (section 12) | Auctionator only for AH and merchant prices (all testers have it installed and scan with it) |
+| 1 | 0.1 | "Version 0.1" and its alphas in `FEATURES.md`; next: alpha.4 with ProfitCraft's own disenchant estimate (section 12) | Auctionator only for AH and merchant prices (all testers have it installed and scan with it) |
 | 2 | 0.2 | "Version 0.2": own AH scan, own merchant recording, "most recent per item" price choice | Auctionator and our own data; works without Auctionator |
 | 3 | 0.3 | "Version 0.3" | Same |
 
@@ -36,8 +36,9 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 |---|---|---|
 | `Core.lua` | Core | Namespace, one event frame that hands game events to the parts, a small message system (`PC:Send(msg, ...)` / `PC:Listen(msg, fn)`), debouncing, error log, money formatting (`FormatMoney`; `FormatProfit` adds a green "+" to gains), slash command |
 | `Data.lua` | Data | Loads `ProfitCraftDB`, fills default settings, runs version upgrades; `PC:SetSetting` announces `SETTINGS_CHANGED` |
-| `Sources/Auctionator.lua` | Source | Wraps Auctionator's public API (AH price, price age, merchant price, disenchant); announces `PRICES_CHANGED` when Auctionator's data changes |
+| `Sources/Auctionator.lua` | Source | Wraps Auctionator's public API (AH price, price age, merchant price); announces `PRICES_CHANGED` when Auctionator's data changes |
 | `Sources/ItemData.lua` | Source | Names, icons, stack sizes and merchant sell prices from Blizzard's item data; requests missing item data once (items that fail to load are not requested again) |
+| `Disenchant.lua` | Prices | ProfitCraft's disenchant table (quality × armor/weapon × item level) and the average value of disenchanting one item, priced with AH prices (section 12) |
 | `Prices.lua` | Prices | One question for everyone: "what does item X cost / sell for?" Applies the rules in section 5 |
 | `Recipes.lua` | Recipes | Reads the open profession's learned recipes and reagents; announces `PROFESSION_OPENED`, `RECIPES_CHANGED`, `PROFESSION_CLOSED` |
 | `Profit.lua` | Profit | Calculates and stores one result per recipe; keeps a ranked list per mode |
@@ -80,7 +81,7 @@ A reverse index (reagent → recipes) to recalculate only affected recipes is no
 
 **Profit per stack:** `profit per craft ÷ output quantity × stack size`, where the stack size is `itemStackCount` from `C_Item.GetItemInfo` (Forever source) for the crafted item; items that don't stack have 1.
 
-**Craft and disenchant:** `disenchant value per item × output quantity × (1 − AH cut) − reagent cost` (the materials are sold on the AH). Nil when the product can't be disenchanted. The disenchant value currently comes from Auctionator, which has no disenchant data for Forever, so every recipe shows "no D/E price"; to be replaced by ProfitCraft's own estimate (section 12).
+**Craft and disenchant:** `disenchant value per item × output quantity × (1 − AH cut) − reagent cost` (the materials are sold on the AH). Nil when the product can't be disenchanted. The disenchant value is ProfitCraft's own estimate (`Disenchant.lua`, section 12).
 
 - AH cut: a setting (`ahCut`), default 5% (web sources; **check in game**); no window control yet.
 - Output quantity: recipes can make more than one item (Forever source: `quantityMin`/`quantityMax`; e.g. Smelt Bronze ×2, PsiLab). A fixed amount counts as is; a random range (Heavy Dynamite 1-5) counts at its average, with the range in the tooltip (decided 2026-11-13).
@@ -99,7 +100,7 @@ ProfitCraftDB = {
     profitMode = "craft",         -- side panel mode: "craft" | "stack" | "disenchant"
     ahCut = 0.05,                 -- AH cut on sales
     panelShown = true,            -- side panel open next to the profession window
-    tooltipDisenchant = true,     -- disenchant line in item tooltips
+    tooltipDisenchant = false,    -- disenchant line in item tooltips (off by default from alpha.4, as in Auctionator)
     reagentBagFreeSlots = false,  -- free-slot count on the reagent bag button
   },
   errors   = { ... },   -- error log: the last 50 caught errors (message, where, time, ProfitCraft version), newest first; repeats of the same error only increase a count
@@ -142,7 +143,7 @@ All windows use Blizzard's current templates (all present in the Forever source)
 - Follows the selected recipe with `hooksecurefunc(SchematicForm, "Init")`.
 
 **Item tooltips**
-- A "Disenchant" line on item tooltips (`TooltipDataProcessor.AddTooltipPostCall` for item tooltips, item ID from `tooltipData.id`; Forever source). On/off in the settings. Shows nothing until the disenchant source works (section 12).
+- A "Disenchant" line on item tooltips (`TooltipDataProcessor.AddTooltipPostCall` for item tooltips, item ID from `tooltipData.id`; Forever source). On/off in the settings, off by default (alpha.4). Shown as "Disenchant (est.)".
 
 **D/E Bags window** (`/pcraft bags`, or the panel's D/E Bags button)
 - Movable `ButtonFrameTemplate` window, closes with Escape. Lists every disenchantable item in the bags (backpack, bags 1-4 and reagent bag: `Enum.BagIndex.Backpack` .. `NUM_TOTAL_EQUIPPED_BAG_SLOTS`), combined per item, with disenchant value, AH price (none for soulbound items) and merchant price per item; the option that pays most after the AH cut is marked. Refreshes on `BAG_UPDATE_DELAYED` and price changes.
@@ -156,7 +157,7 @@ All windows use Blizzard's current templates (all present in the Forever source)
   - ProfitCraft's own movable window (`/pcraft settings`, or the panel's Settings button). Closing it just closes it: it never goes through Blizzard's settings panel, whose close always reopens the game menu (Forever source: `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`). Closes with Escape (`UISpecialFrames`).
   - The same page under Blizzard's Options > AddOns > ProfitCraft (`Settings.RegisterCanvasLayoutCategory` + `Settings.RegisterAddOnCategory`, Forever source). Closing that returns to the game menu, which is where the user came from.
 - Each page re-reads the values when shown and after any change (`SETTINGS_CHANGED`, and `CVAR_UPDATE` for the mirrored game setting), so the two never disagree.
-- Options (alpha.3): disenchant line in item tooltips (on); free slots on the backpack button (mirrors Blizzard's `displayFreeBagSlots`, read and written with `C_CVar`); free slots on the reagent bag button (off); debug mode (off).
+- Options (alpha.4): disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); free slots on the backpack button (mirrors Blizzard's `displayFreeBagSlots`, read and written with `C_CVar`); free slots on the reagent bag button (off); debug mode (off).
 
 ## 8. Slash command
 
@@ -187,7 +188,7 @@ Results from PsiLab (2026-11-13) are in `knowledge/forever-vs-vanilla.md`, "Addo
 - [x] Interface version on the live client is 16001 (build 1.60.1 (70938)). PsiLab, 2026-11-13.
 - [x] Listing recipes: `GetFilteredRecipeIDs` returns only what the window currently lists (it follows the window's search and filters); `GetAllRecipeIDs` returns all recipes of the open profession, learned and unlearned; `GetRecipeInfo(id).learned` separates the learned ones. PsiLab, 2026-11-13.
 - [x] Auctionator 346 on Forever: all 21 `Auctionator.API.v1` functions present; `RegisterForDBUpdate` fires after each AH scan; merchant prices are recorded. PsiLab, 2026-11-13.
-- [x] Auctionator's disenchant prices don't work on Forever (its D/E support covers only later expansions). Sylice, 2026-11-13. See section 12.
+- [x] Auctionator's disenchant prices don't work on Forever: Auctionator 346 treats Forever as Retail and its Retail D/E code only knows WoD to Shadowlands items. Sylice in game and Auctionator's code, 2026-11-13. See section 12.
 - [x] Saved variables load and save normally on build 70938. PsiLab, 2026-11-13.
 - [x] Reading the ruleset: `GetRealmName()` = "CAMWOW US2 Realm 7 PvE" (ruleset at the end), `GetRealmID()` = 6933. PsiLab, 2026-11-13.
 - [x] All players of a ruleset share one AH (Sylice, 2026-11-13).
@@ -196,7 +197,9 @@ Results from PsiLab (2026-11-13) are in `knowledge/forever-vs-vanilla.md`, "Addo
 - [ ] AH cut on sale is 5%.
 - [ ] Is the AH shared between Horde and Alliance? Assumed not. Only matters for 0.2 (own scan data).
 - [ ] Does Blizzard's free-bag-space number on the backpack also count the reagent bag?
-- [ ] Disenchant: item level or required level decides the materials? (section 12)
+- [x] Disenchant: item level decides the materials (Forever client's table is ordered by item level, forevermastery.com; all Classic sources agree). 2026-11-13, section 12.
+- [x] Essences convert both ways (3 lesser <-> 1 greater), repeatedly. Sylice in game, 2026-11-13.
+- [ ] Disenchant odds on Forever match the Classic table (section 12; quick check: a green weapon of item level 21-30 gives Greater Magic Essence, not Astral).
 
 ## 11. Mistakes found in other addons, and our rule against each
 
@@ -230,31 +233,33 @@ From the code review of ForeverProfit v1.8.0 and CraftProfit 0.5.2 (2026-11-13).
 - From CraftProfit: a private namespace with one event frame and an internal message system; protection against bait listings; per-reagent break-even prices; an AH scan that respects the AH's request limits.
 
 
-## 12. Disenchant values (findings 2026-11-13, to build next)
+## 12. Disenchant values (alpha.4, built 2026-11-13)
 
 ### Why Auctionator can't be the source
-- ProfitCraft 0.1 used `Auctionator.API.v1.GetDisenchantPriceByItemID` (and, from alpha.1, `...ByItemLink`). On Forever both return nothing for every item, so every item showed "no D/E price".
-- Auctionator's own tooltip setting says its disenchant prices only work for some later expansions (WoD, Shadowlands, MoP and a few others), not Forever (Sylice, in game, 2026-11-13). The CurseForge description of the addon "Disenchant Forever" says the same: on WoW Forever, Auctionator only prices disenchanting for much later expansions.
-- Having Enchanting makes no difference (Sylice tested with an Enchanting alt).
-- **Decision (Sylice, 2026-11-13): no separate addon; ProfitCraft builds its own disenchant estimate.**
+- ProfitCraft 0.1 used `Auctionator.API.v1.GetDisenchantPriceByItemID` / `...ByItemLink`. On Forever both return nothing for every item.
+- Cause (Auctionator 346's code, 2026-11-13): `Source/Constants/Main.lua:56` sets `IsRetail` for Forever ("temporary fix assigning retail to mainline"), so Forever loads Auctionator's Retail disenchant code (`Source_Mainline/Enchant/`), which has tables only for WoD, Legion, BfA and Shadowlands items. Forever items count as original-expansion items, so the lookup returns nothing. That matches the "WoD, Legion, BfA & Shadowlands only" setting text Sylice saw. Auctionator's Classic table (`Source_Classic/Enchant/`) exists but is not loaded on Forever. If Auctionator fixes this, its values may start working; ProfitCraft keeps its own either way.
+- **Decision (Sylice, 2026-11-13): no separate addon; ProfitCraft builds its own estimate.**
 
-### How Disenchant Buddy does it (reference, `addons/reference/DisenchantBuddy`, v2.8.0, GPLv3: study only, never copy code)
-1. Reads quality, item level and item class from `C_Item.GetItemInfo` (`AddDisenchantInfo.lua:36`).
-2. Skips grey/white items and anything that isn't armor or a weapon; legendaries show "cannot be disenchanted".
-3. Looks the result up in hard-coded tables per quality (`DisenchantResults/Uncommon.lua`, `Rare.lua`, `Epic.lua`): green armor and green weapons separately, blues, purples. Each row: material item ID, chance %, min and max quantity. Example: green armor, item level <= 15: Strange Dust 80% (1-2), Lesser Magic Essence 20% (1-2).
-4. Prices each material with Auctionator's AH price and adds up an average value: price × chance × (min + max) / 2.
-- **Weak spot:** it detects Forever by build number (`GameVersions.lua:12`) but treats Forever exactly like Classic in its tables (`if IsClassic or IsForever`, e.g. `Uncommon.lua:144`). Its README doesn't list Forever as supported (its `.toc` does). So its numbers are Classic's rules, unverified for Forever.
+### What ProfitCraft does (`Disenchant.lua`)
+1. Reads quality, item level and item class with `C_Item.GetItemInfo` (from the exact link when there is one).
+2. Only green, blue and purple armor and weapons; anything else, or an item level outside the table, gives no value.
+3. Finds the row for quality × armor/weapon × **item level**. Each row lists material, chance %, min and max amount (each amount equally likely).
+4. Value = sum over materials of AH price × chance × (min + max) / 2, rounded to whole copper. If any material has no AH price, there is no value (as with recipes: never show an incomplete number).
+5. Essences: 3 lesser ↔ 1 greater convert both ways (Sylice in game), so each counts at whichever form sells for more: lesser = max(lesser, greater / 3), greater = max(greater, 3 × lesser); if only one form has a price, the other is derived from it.
+6. Used by the tooltip line (off by default, as in Auctionator), D/E Bags and the craft-and-disenchant mode. Labelled "(est.)".
 
-### Public sources for the table (all unverified for Forever)
-- [wow-professions.com Forever disenchanting guide](https://www.wow-professions.com/forever/disenchanting-guide): brackets by **required** level.
-- [forevermastery.com disenchant table](https://forevermastery.com/en/tools/disenchant): both required level and item level (item level ≈ required level + 5).
-- [foreverdb.net enchanting](https://foreverdb.net/profession/enchanting): by **item** level, labelled "Classic data".
-- [Wowpedia disenchanting tables](https://wowpedia.fandom.com/wiki/Disenchanting_tables): general (not Forever), by item level; matches foreverdb.
-- world-of-warcraft-forever.wiki: contradicts all others; ignore.
-- General shape agreed by all: green armor mostly dust (~75%), green weapons mostly essence (~75%), small shard chance (~5%); blue = 1 shard (Nexus Crystal ~0.5% at high level); purple = shard(s) or Nexus Crystal.
+### Where the table comes from
+Typed in by us from public game facts; no code copied from Auctionator (All Rights Reserved) or Disenchant Buddy (GPLv3).
+- Base: [Warcraft Wiki "Disenchanting tables"](https://warcraft.wiki.gg/wiki/Disenchanting_tables) (by item level), which matches [foreverdb.net enchanting](https://foreverdb.net/profession/enchanting) (labelled "Classic data").
+- Cross-checked row by row against the Classic tables of Auctionator and Disenchant Buddy; where they differ, the majority wins:
+  - Green weapons, item level 21-30: **Greater Magic Essence** (both addons) instead of the wiki's Astral essences.
+  - Green weapons, item level 51-65: dust 20% / essence 75% / shard 5% (adds up to 100%; the wiki has 22/75/3, Auctionator 22/75/5).
+  - Purple armor 61-92: 1-2 Nexus Crystals, even split (wiki and Auctionator). Purple weapons 61-92: 33% one, 67% two (all three).
+  - Blue 56-86: Large Brilliant Shard 99.5%, Nexus Crystal 0.5% (Disenchant Buddy's Classic rows). The wiki's rows above item level 65 use TBC materials that don't exist at level 60, so they are not used.
+- Item level, not required level: the Forever client's table is ordered by item level ([forevermastery.com](https://forevermastery.com/en/tools/disenchant)); wow-professions.com's required-level brackets are the same table shifted by 5.
+- Ranges covered: green 1-65, blue 1-86, purple 40-92.
+- Not yet confirmed for Forever: the odds and amounts (the server rolls the loot; the client does not contain it).
 
-### Plan
-1. **ProfitCraft's own table** (our own code and data entry from the public sources; game facts, not Disenchant Buddy's code), keyed by quality, armor/weapon and level; priced with Auctionator's AH prices (`GetAuctionPriceByItemID`, which works on Forever). Labelled as an estimate until confirmed.
-2. **Open question to settle first:** item level or required level? Both are in `C_Item.GetItemInfo` (`itemLevel`, `itemMinLevel`). Settle with real disenchants on Sylice's Enchanting alt.
-3. **Confirm with real data:** a PsiLab disenchant recorder (item ID, quality, item level, required level, materials received), then later ProfitCraft learning from the player's own disenchants (as ForeverForge Auction and Forever Simple Market do: switch to own odds after enough samples).
-4. Replace `PC.Auctionator:GetDisenchantPrice` with the new source; the tooltip line, D/E Bags window and craft-and-disenchant mode keep working unchanged. Remove the "(Auctionator est.)" wording.
+### Later
+- Confirm the odds with real disenchants (quick check: a green weapon of item level 21-30).
+- Possibly learn from the player's own disenchants (switch to own odds after enough samples, as ForeverForge Auction and Forever Simple Market do).

@@ -1,5 +1,5 @@
 -- ProfitCraft: bag list
--- A movable window listing the disenchantable items in your bags with their disenchant estimate (Auctionator),
+-- A movable window listing the disenchantable items in your bags with their disenchant estimate,
 -- AH price and merchant sell price, best option highlighted. Opened with the side panel's "Bags" button or
 -- /pcraft bags; works anywhere, not only at a profession window. Closes with Escape.
 
@@ -44,7 +44,7 @@ local function BuildList()
 	local cut = PC.db.settings.ahCut
 	local list = {}
 	for _, entry in ipairs(ReadBags()) do
-		local disenchant = PC.Auctionator:GetDisenchantPrice(entry.itemID, entry.link)
+		local disenchant = PC.Disenchant:GetValue(entry.itemID, entry.link)
 		if disenchant then
 			entry.disenchant = disenchant
 			entry.auction = not entry.bound and PC.Prices:GetAuctionPrice(entry.itemID) or nil
@@ -129,7 +129,7 @@ function Bags:Refresh()
 	end
 	local list = BuildList()
 	scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
-	footer:SetText(string.format("%d item(s). Per item; %s>|r pays most after the %d%% AH cut. D/E: Auctionator est.",
+	footer:SetText(string.format("%d item(s). Per item; %s>|r pays most after the %d%% AH cut. D/E: estimate.",
 		#list, GOOD, math.floor(PC.db.settings.ahCut * 100 + 0.5)))
 end
 

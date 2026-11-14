@@ -15,9 +15,9 @@ With [WowUp](https://wowup.io): install from this repository's URL. Or download 
 3. The mode button switches between **Per craft**, **Per stack** (one full stack of the product) and **Disenchant** (craft it, then disenchant it).
 4. Click a recipe to show it; the recipe details show its net profit and the cost of each reagent.
 
-**Disenchanting** (estimates from Auctionator, not yet verified for Forever):
+**Disenchanting** (ProfitCraft's own estimate: the average value of the materials, from the Classic disenchant tables by item level, priced with Auctionator's AH prices; not yet verified for Forever):
 
-- Item tooltips show a "Disenchant (Auctionator est.)" line.
+- Item tooltips can show a "Disenchant (est.)" line (off by default; turn on in Settings).
 - **D/E Bags** (button in the panel, or `/pcraft bags`) lists every disenchantable item in your bags with its disenchant estimate, AH price and merchant price; the best option after the AH cut is marked.
 - The panel's third mode, **Disenchant**, ranks recipes by crafting the item and disenchanting it.
 
