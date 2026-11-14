@@ -142,7 +142,7 @@ local function Header(text, offset)
 end
 
 local function Create()
-	frame = PC:CreateWindow("ProfitCraftBags", UIParent, WIDTH, HEIGHT, "ProfitCraft: Bags", { movable = true })
+	frame = PC:CreateWindow("ProfitCraftBags", UIParent, WIDTH, HEIGHT, "ProfitCraft: D/E Bags", { movable = true })
 
 	local itemHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	itemHeader:SetPoint("BOTTOMLEFT", frame.Inset, "TOPLEFT", 8, 4)

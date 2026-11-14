@@ -18,7 +18,7 @@ With [WowUp](https://wowup.io): install from this repository's URL. Or download 
 **Disenchanting** (estimates from Auctionator, not yet verified for Forever):
 
 - Item tooltips show a "Disenchant (Auctionator est.)" line.
-- **Bags** (button in the panel, or `/pcraft bags`) lists every disenchantable item in your bags with its disenchant estimate, AH price and merchant price; the best option after the AH cut is marked.
+- **D/E Bags** (button in the panel, or `/pcraft bags`) lists every disenchantable item in your bags with its disenchant estimate, AH price and merchant price; the best option after the AH cut is marked.
 - The panel's third mode, **Disenchant**, ranks recipes by crafting the item and disenchanting it.
 
 **Reagent bag free slots** (off by default; turn on in Settings): shows the reagent bag's free slots on its bag bar button. For the normal bags, turn on Blizzard's own "Show Free Bag Space" (Options > Interface).

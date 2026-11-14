@@ -179,12 +179,12 @@ local function Create()
 		end
 	end)
 
-	local bagsButton = SmallButton(frame, 52, "Bags", "Disenchant value of the items in your bags.",
-		function() PC:Send("TOGGLE_BAGS") end)
-	bagsButton:SetPoint("TOPRIGHT", -8, -32)
-	local settingsButton = SmallButton(frame, 70, "Settings", "ProfitCraft settings.",
+	local settingsButton = SmallButton(frame, 66, "Settings", "ProfitCraft settings.",
 		function() PC:Send("TOGGLE_SETTINGS") end)
-	settingsButton:SetPoint("RIGHT", bagsButton, "LEFT", -4, 0)
+	settingsButton:SetPoint("TOPRIGHT", -8, -32)
+	local bagsButton = SmallButton(frame, 70, "D/E Bags", "Disenchant value of the items in your bags.",
+		function() PC:Send("TOGGLE_BAGS") end)
+	bagsButton:SetPoint("RIGHT", settingsButton, "LEFT", -4, 0)
 
 	statusText = PC:CreateFooter(frame)
 	scrollBox = PC:CreateScrollList(frame, ROW_HEIGHT, "panel row", InitRow)
@@ -200,11 +200,30 @@ local function Create()
 	end
 end
 
--- A tab at the bottom of Forever's profession tab column that shows or hides the panel (same template and
--- art as Blizzard's tabs: LargeSideTabButtonTemplate). Lit while the panel is open.
+-- A tab in the next free slot of Forever's profession tab column (directly under the last visible Blizzard
+-- tab, 2 px apart like Blizzard's own), that shows or hides the panel. Same template and art as Blizzard's
+-- tabs (LargeSideTabButtonTemplate). Lit while the panel is open. Re-placed whenever Blizzard refreshes its
+-- tabs, so it never sits at a fixed spot another addon may use (What's Training puts its tab 10 px from the
+-- bottom of that edge, Crafting/Crafting.lua:197 in its 11.4.6).
+local function PlaceToggleTab()
+	if not toggleTab then return end
+	local last = ProfessionsFrame.ProfessionsOverviewTab
+	for _, tab in ipairs(ProfessionsFrame.rightProfessionTabs or {}) do
+		if tab:IsShown() then last = tab end
+	end
+	toggleTab:ClearAllPoints()
+	if last then
+		toggleTab:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -2)
+	else
+		toggleTab:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 0, -60)
+	end
+end
+
 local function CreateToggleTab()
 	toggleTab = CreateFrame("Frame", nil, ProfessionsFrame, "LargeSideTabButtonTemplate")
-	toggleTab:SetPoint("BOTTOMLEFT", ProfessionsFrame, "BOTTOMRIGHT", 0, 40)
+	if type(ProfessionsFrame.RefreshRightTabs) == "function" then
+		hooksecurefunc(ProfessionsFrame, "RefreshRightTabs", function() PC:Call("place tab", PlaceToggleTab) end)
+	end
 	toggleTab.Icon:SetTexture(PC.ICON)
 	toggleTab:SetFillToInterior(true)
 	toggleTab.tooltipText = "ProfitCraft"
@@ -222,6 +241,7 @@ end
 
 function UpdateToggleTab()
 	if not toggleTab then return end
+	PlaceToggleTab()
 	local onRecipes = PC.Recipes.isOpen and not BookPageShown()
 	toggleTab:SetShown(onRecipes)
 	toggleTab.SelectedTexture:SetShown(frame ~= nil and frame:IsShown())

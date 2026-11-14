@@ -36,6 +36,12 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
 
+## Version 0.1-alpha.2 (2026-11-13)
+
+- [x] ProfitCraft's side tab takes the next free slot under Blizzard's profession tabs instead of a fixed spot (it overlapped What's Training's tab, which sits 10 px from the bottom).
+- [x] Side panel: Settings button in the top-right corner; the bag window's button is renamed "D/E Bags" (window title "ProfitCraft: D/E Bags").
+- [x] Settings are also in Blizzard's Options > AddOns > ProfitCraft: the same page as ProfitCraft's own window, built from one option list, both always in sync (the approach Questie uses; reimplemented, not copied).
+
 ## Version 0.2 (standalone: works without Auctionator)
 
 - [x] **Our own AH scan**, so ProfitCraft works without Auctionator (decided 2026-11-13). Also gives the listing detail Auctionator's API doesn't expose.
@@ -45,7 +51,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 ## Requirements (apply to every version)
 
 - **Works fully without Auctionator** (from 0.2 on; disenchant estimates stay Auctionator-only until ProfitCraft has its own Forever-verified disenchant table; 0.1 only loads cleanly without it and says it has no price source). ProfitCraft is a standalone addon; Auctionator is an optional, recommended source (`## OptionalDeps: Auctionator` in the `.toc`, so it loads first when installed, never `## Dependencies`). Auctionator's data is used when available. (Decided 2026-11-13.)
-- **Closing the settings must not open the game menu.** ProfitCraft uses its own settings window, never Blizzard's settings panel (decided 2026-11-13). Cause: Blizzard's settings panel always reopens the game menu when it is closed (Forever UI source, `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`, called by both the Close button and Escape).
+- **Closing the settings must not open the game menu.** ProfitCraft's own commands and buttons open its own settings window, never Blizzard's settings panel (decided 2026-11-13). The same settings page is also listed in Blizzard's Options > AddOns, for people who look there; closing that one returns to the game menu, which is where they came from. Cause: Blizzard's settings panel always reopens the game menu when it is closed (Forever UI source, `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`, called by both the Close button and Escape).
 
 ## Version 0.3
 
