@@ -784,6 +784,7 @@ local function CreatePanel()
 	statusText:SetJustifyH("LEFT")
 
 	CreateHistoryPanel()
+	historyPanel:Show()  -- PC:CreateWindow creates windows hidden; it shows and hides with the Sniper panel (its parent)
 	panel:HookScript("OnShow", Refresh)
 	historyPanel:HookScript("OnShow", UpdateHistoryPanel)
 	selectedItemID = selectedItemID or (Data().items[1] and Data().items[1].itemID)
