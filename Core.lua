@@ -169,6 +169,8 @@ SlashCmdList.PROFITCRAFT = function(msg)
 			PrintErrors(rest == "clear")
 		elseif command == "bags" then
 			PC:Send("TOGGLE_BAGS")
+		elseif command == "money" then
+			PC:SetSetting("moneyWindow", not PC.db.settings.moneyWindow)
 		elseif command == "tooltip" and (rest == "on" or rest == "off") then
 			PC:SetSetting("tooltipDisenchant", rest == "on")
 			PC:Print("disenchant line in item tooltips " .. rest .. ".")
@@ -177,6 +179,7 @@ SlashCmdList.PROFITCRAFT = function(msg)
 			print("  /pcraft - show or hide the profit list (with a profession window open)")
 			print("  /pcraft settings - open the settings window")
 			print("  /pcraft bags - disenchant values of the items in your bags")
+			print("  /pcraft money - show or hide the money window")
 			print("  /pcraft tooltip on|off - disenchant estimate in item tooltips")
 			print("  /pcraft debug on|off - show errors in chat as they happen")
 			print("  /pcraft errors - list logged errors; /pcraft errors clear - empty the log")

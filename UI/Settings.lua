@@ -40,6 +40,10 @@ local OPTIONS = {
 					.. "disabled or removed." },
 		} },
 	{ divider = true },
+	{ key = "moneyWindow", label = "Money window",
+		help = "A small movable window with your money and up to 5 currencies of your choice. Right-click it to add "
+			.. "or remove currencies, lock its position, change its background or hide it. Also: /pcraft money." },
+	{ divider = true },
 	{ key = "debug", label = "Debug mode: show errors in chat",
 		help = "Errors are always logged (/pcraft errors). With debug mode on they are also printed in chat as "
 			.. "they happen." },

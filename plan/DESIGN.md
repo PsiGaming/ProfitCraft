@@ -21,12 +21,12 @@ These follow from the problems found in ForeverProfit and CraftProfit; the full 
 | Milestone | Version | Contents | Price sources |
 |---|---|---|---|
 | 1 | 0.1 | "Version 0.1" and its alphas in `FEATURES.md`; next: alpha.4 with ProfitCraft's own disenchant estimate (section 12) | Auctionator only for AH and merchant prices (all testers have it installed and scan with it) |
-| 2 | 0.2 | "Version 0.2": own AH scan, own merchant recording, "most recent per item" price choice | Auctionator and our own data; works without Auctionator |
+| 2 | 0.2 | "Version 0.2": money window (beta.0), own AH scan, own merchant recording, "most recent per item" price choice | Auctionator and our own data; works without Auctionator |
 | 3 | 0.3 | "Version 0.3" | Same |
 
 Auctionator is listed as `## OptionalDeps: Auctionator`, not `## Dependencies`, so the structure is already standalone: price lookups go through one price module with one "source" per data provider, and milestone 2 adds sources without changing anything else. Without Auctionator, 0.1 loads normally, says once in chat that it has no price source, and the panel says so too.
 
-Releases are GitHub pre-releases at github.com/PsiGaming/ProfitCraft named `v0.1-alpha.N`, with one zip `ProfitCraft-v0.1-alpha.N-forever.zip` (the `plan/` folder is left out via `.gitattributes`). Sylice decides version numbers.
+Releases are GitHub pre-releases (all of them, finals included; AGENTS.md) at github.com/PsiGaming/ProfitCraft named like `v0.2-beta.N`, with one zip `ProfitCraft-v0.2-beta.N-forever.zip` (the `plan/` folder is left out via `.gitattributes`). Sylice decides version numbers.
 
 ## 3. Files and parts
 
@@ -48,6 +48,7 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 | `UI/Tooltip.lua` | Window | Disenchant line in item tooltips |
 | `UI/RecipeTooltip.lua` | Window | Cost and profit lines on trainer tooltips (Spell tooltip data, id = recipe ID) and recipe item tooltips (the ItemSpellTriggerLearn line's spellID = recipe ID); uses `Recipes:Load` and `Profit:Evaluate`. BoP products: no sale lines |
 | `UI/Bags.lua` | Window | "D/E Bags": disenchantable items in the bags with disenchant / AH / merchant values |
+| `UI/MoneyWindow.lua` | Window | Money window: money and up to 5 tracked currencies, right-click menu (0.2) |
 | `UI/BagSpace.lua` | Window | Free bag slots split as (reagent\|normal) on the reagent bag or backpack button |
 | `UI/Settings.lua` | Window | The settings page, shown in our own window and in Blizzard's Options > AddOns |
 | `Sources/Scan.lua`, `Sources/Merchant.lua` | Source | Milestone 2 (not built): our own AH scan and merchant buy-price recording |
@@ -102,8 +103,11 @@ ProfitCraftDB = {
     ahCut = 0.05,                 -- AH cut on sales
     panelShown = true,            -- side panel open next to the profession window
     tooltipDisenchant = false,    -- disenchant line in item tooltips (off by default from alpha.4, as in Auctionator)
+    moneyWindow = false,          -- money window shown (0.2)
     freeSlots = "none",           -- ProfitCraft's free-slot split: "none" | "reagent" (on the reagent bag button) | "backpack" (in place of Blizzard's count); was reagentBagFreeSlots (true -> "reagent") until database version 2 (rc.0)
   },
+  money    = { x = 900, y = 500, locked = false, bg = { r = 0, g = 0, b = 0, a = 0.5 }, currencies = { 101, 102 } },
+                        -- money window (0.2): top-right corner, lock, background, tracked currency IDs; one list for all characters
   errors   = { ... },   -- error log: the last 50 caught errors (message, where, time, ProfitCraft version), newest first; repeats of the same error only increase a count
   rulesets = {          -- milestone 2: our own AH data, per ruleset (see below)
     ["<ruleset key>"] = {
@@ -155,12 +159,18 @@ All windows use Blizzard's current templates (all present in the Forever source)
 - "ProfitCraft only" hides Blizzard's count by setting its text (`MainMenuBarBackpackButton.FreeSlots`) to alpha 0 and **keeps Blizzard's setting on**, so Blizzard's count is back as soon as ProfitCraft is disabled or removed (Sylice's requirement). Blizzard only shows/hides that text (`MainMenuBarBackpackMixin:SetCountShown`, Forever source `Blizzard_MainMenuBarBagButtons/Shared/MainMenuBarBagButtons.lua`), never changes its alpha. Restored to alpha 1 when another choice is picked.
 - Styled like Blizzard's count (`NumberFontNormal`, "(n)", 10 px below centre), drawn on our own overlay frames. Updates one frame after `BAG_UPDATE_DELAYED`, like Blizzard's own count.
 
+**Money window** (0.2-beta.0, Sylice 2026-11-17)
+- One row, no border: money on the right (`PC:FormatMoney(GetMoney())`), up to 5 tracked currencies to its left (icon + amount, `C_CurrencyInfo.GetCurrencyInfo`), each new one further left. Anchored by its **top-right corner**, so it grows leftwards; after a drag it is re-anchored the same way. Updates on `PLAYER_MONEY` and `CURRENCY_DISPLAY_UPDATE`. Hovering a currency shows Blizzard's tooltip (`GameTooltip:SetCurrencyByID`).
+- Off by default: settings checkbox "Money window", `/pcraft money`, or "Hide" in its menu.
+- Right-click anywhere (also on a currency): **Add currency** (submenu: the character's Currency tab list, `C_CurrencyInfo.GetCurrencyListSize/GetCurrencyListInfo`, headers skipped, already tracked ones left out; disabled at 5; currencies in sections collapsed in the Currency tab aren't in the game's list, and ProfitCraft says so rather than opening them), **Remove currency**, **Lock/Unlock position** (locked: dragging does nothing), **Background colour...** (Blizzard's colour picker with opacity: `ColorPickerFrame:SetupColorPickerAndShow`, `hasOpacity`; Cancel restores), **Hide**. Menus: `MenuUtil.CreateContextMenu` (Forever's character window uses it).
+- Saved account-wide in `ProfitCraftDB.money` (section 6); a tracked currency the current character doesn't have shows 0.
+
 **Settings**
 - One list of options, built into two identical pages (approach seen in Questie, `addons/reference/Questie`, `Modules/Options/QuestieOptionsEngine.lua`; our own code):
   - ProfitCraft's own movable window (`/pcraft settings`, or the panel's Settings button). Closing it just closes it: it never goes through Blizzard's settings panel, whose close always reopens the game menu (Forever source: `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`). Closes with Escape (`UISpecialFrames`).
   - The same page under Blizzard's Options > AddOns > ProfitCraft (`Settings.RegisterCanvasLayoutCategory` + `Settings.RegisterAddOnCategory`, Forever source). Closing that returns to the game menu, which is where the user came from.
 - Each page re-reads the values when shown and after any change (`SETTINGS_CHANGED`, and `CVAR_UPDATE` for the mirrored game setting), so the two never disagree.
-- Options (beta.0), in three sections separated by divider lines: (1) price warning age slider and disenchant tooltip line, (2) free bag slots (a dropdown since rc.0), (3) debug mode. Details: disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); price warning age (slider Off/1/2/3/4 days, default 2; Blizzard's `MinimalSliderWithSteppersTemplate`); free bag slots (dropdown: Off / Blizzard only / ProfitCraft + Blizzard / ProfitCraft only, default Off; writes Blizzard's `displayFreeBagSlots` with `C_CVar` and ProfitCraft's `freeSlots`, see "Free bag slots" above); debug mode (off).
+- Options (beta.0), in three sections separated by divider lines: (1) price warning age slider and disenchant tooltip line, (2) free bag slots (a dropdown since rc.0), (3) money window (0.2), (4) debug mode. Details: disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); price warning age (slider Off/1/2/3/4 days, default 2; Blizzard's `MinimalSliderWithSteppersTemplate`); free bag slots (dropdown: Off / Blizzard only / ProfitCraft + Blizzard / ProfitCraft only, default Off; writes Blizzard's `displayFreeBagSlots` with `C_CVar` and ProfitCraft's `freeSlots`, see "Free bag slots" above); debug mode (off).
 
 ## 8. Slash command
 
@@ -171,6 +181,7 @@ All windows use Blizzard's current templates (all present in the Forever source)
 | `/pcraft` | Show or hide the side panel (with a profession window open) |
 | `/pcraft settings` | Open or close the settings window |
 | `/pcraft bags` | Open or close the D/E Bags window |
+| `/pcraft money` | Show or hide the money window |
 | `/pcraft tooltip on\|off` | Disenchant line in item tooltips |
 | `/pcraft debug on\|off` | Print errors in chat as they happen |
 | `/pcraft errors` | List logged errors; `/pcraft errors clear` empties the log |
@@ -201,6 +212,7 @@ Results from PsiLab (2026-11-13) are in `knowledge/forever-vs-vanilla.md`, "Addo
 - [ ] AH cut on sale is 5%.
 - [ ] Is the AH shared between Horde and Alliance? Assumed not. Only matters for 0.2 (own scan data).
 - [x] Blizzard's free-bag-space number on the backpack also counts the reagent bag (Sylice in game, 2026-11-17). Led to the rc.0 split.
+- [ ] 0.2-beta.0 in game: which currencies Forever has and whether they appear in the Add currency list; the colour picker's opacity slider changes the background live.
 - [ ] rc.0 in game: "(6|24)" fits on the reagent bag button; "ProfitCraft only" really hides Blizzard's count (relies on Forever loading `Shared/MainMenuBarBagButtons.lua`, inferred from its `.toc`, where camelot-specific files are separate) and it returns when another choice is picked.
 - [x] Disenchant: item level decides the materials (Forever client's table is ordered by item level, forevermastery.com; all Classic sources agree). 2026-11-13, section 12.
 - [x] Essences convert both ways (3 lesser <-> 1 greater), repeatedly. Sylice in game, 2026-11-13.

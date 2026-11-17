@@ -23,6 +23,8 @@ With [WowUp](https://wowup.io): install from this repository's URL. Or download 
 
 **Free bag slots** (Settings, off by default): Blizzard's own count on the backpack is one total that includes the reagent bag. ProfitCraft can split it as "(reagent|normal)", e.g. "(6|24)", in the order the bags sit on the bag bar. Choices: Off, Blizzard only, ProfitCraft + Blizzard (the split on the reagent bag button, Blizzard's total on the backpack) and ProfitCraft only (the split on the backpack in place of Blizzard's total; Blizzard's own option stays on, so its count comes back if ProfitCraft is disabled).
 
+**Money window** (Settings or `/pcraft money`, off by default): a small movable window with your money and up to 5 currencies of your choice; it grows to the left as you add currencies. Right-click it to add or remove currencies, lock its position, change its background colour and opacity, or hide it.
+
 How profit is calculated: AH price of the product × number made × (1 − 5% AH cut) − reagent cost. Each reagent costs the lower of its merchant price and its AH price. The listing deposit is left out, because it is refunded when the item sells. Recipes with a missing price are listed last and never counted as profitable.
 
 ## Commands
@@ -30,6 +32,7 @@ How profit is calculated: AH price of the product × number made × (1 − 5% AH
 - `/pcraft`: show or hide the panel (with a profession window open)
 - `/pcraft settings`: open the settings window (also the "Settings" button in the panel)
 - `/pcraft bags`: disenchant values of the items in your bags
+- `/pcraft money`: show or hide the money window
 - `/pcraft tooltip on|off`: the disenchant line in item tooltips
 - `/pcraft debug on|off`: show errors in chat as they happen (off by default)
 - `/pcraft errors`: list logged errors; `/pcraft errors clear` empties the log
