@@ -1,5 +1,5 @@
--- ProfitCraft: Sniper (watch list & quick buy; FEATURES.md "Watch list & quick buy")
--- While the AH is open and sniping runs, the watched reagents are searched in turn (C_AuctionHouse.SendSearchQuery;
+-- ProfitCraft: RapidFire (watch list & quick buy; FEATURES.md "RapidFire: watch list & quick buy")
+-- While the AH is open and RapidFire runs, the watched reagents are searched in turn (C_AuctionHouse.SendSearchQuery;
 -- Blizzard allows 100 searches a minute, Forever API docs). Each item is searched every `interval` seconds, but at
 -- least as many seconds as items are active (Sylice, 2026-11-17), so at most one search a second. The AH also pushes
 -- changes to open searches (COMMODITY_SEARCH_RESULTS_UPDATED).
@@ -17,8 +17,8 @@
 
 local ADDON_NAME, PC = ...
 
-local Sniper = {}
-PC.Sniper = Sniper
+local Rapid = {}
+PC.Rapid = Rapid
 
 local MAX_ITEMS = 10
 local FLASH_SECONDS = 1.5
@@ -29,7 +29,7 @@ local HISTORY_SECONDS = 15 * 60
 local HISTORY_BARS = 60
 local INTERVALS = { 1, 3, 5, 10, 30, 60, 300 }
 local ROW_HEIGHT = 24
-local BUY_BUTTON_NAME = "ProfitCraftSniperBuy"
+local BUY_BUTTON_NAME = "ProfitCraftRapidFireBuy"
 local SORT_BY_PRICE = { { sortOrder = Enum.AuctionHouseSortOrder and Enum.AuctionHouseSortOrder.Price or 0, reverseSort = false } }
 
 local panel, historyPanel, toggleButton, popup, buyButton, statusText, startButton, idBox, keyButton, keepInput
@@ -42,10 +42,10 @@ local pending        -- the purchase in progress: { itemID, quantity, expected, 
 local popupItemID    -- the item the popup offers
 local selectedItemID -- the item the history panel shows
 
-local function Data() return PC.db.sniper end
+local function Data() return PC.db.rapidFire end
 
 local function Debug(message)
-	if PC.db.settings.debug then PC:Print("sniper: " .. message) end
+	if PC.db.settings.debug then PC:Print("RapidFire: " .. message) end
 end
 
 local function Entry(itemID)
@@ -73,7 +73,7 @@ end
 
 -- What buying now gets: units at or under the max, cheapest first, as many as the money above the amount to keep
 -- pays for. Returns quantity and total cost (0, 0 when nothing).
-function Sniper:GetDeal(itemID)
+function Rapid:GetDeal(itemID)
 	local entry, levels = Entry(itemID), listings[itemID]
 	if not (entry and entry.on and levels and (entry.max or 0) > 0) then return 0, 0 end
 	local budget = GetMoney() - Data().minBalance
@@ -90,12 +90,12 @@ function Sniper:GetDeal(itemID)
 end
 
 -- Seconds between each item's checks: the chosen interval, but at least one second per active item.
-function Sniper:GetEffectiveInterval(count)
+function Rapid:GetEffectiveInterval(count)
 	return math.max(Data().interval, count or #ActiveItems())
 end
 
 -- Seconds between two searches.
-function Sniper:GetSpacing(count)
+function Rapid:GetSpacing(count)
 	count = math.max(count or #ActiveItems(), 1)
 	return self:GetEffectiveInterval(count) / count
 end
@@ -121,7 +121,7 @@ local function Record(itemID, price)
 end
 
 -- now, average, lowest (and when), highest, trend ("up"/"down"/"flat"), number of checks; nil without data.
-function Sniper:GetHistoryStats(itemID)
+function Rapid:GetHistoryStats(itemID)
 	local list = history[itemID]
 	if not list or #list == 0 then return nil end
 	local sum, low, lowTime, high = 0, math.huge, nil, 0
@@ -145,7 +145,7 @@ end
 -- The chart's bars: bar index (1 = oldest, HISTORY_BARS = now) -> the lowest price checked in that bar's time slot.
 -- Slots are fixed to the clock (every check stays in its slot for good); counting them back from "now" made checks
 -- slide between neighbouring bars, so bars jumped up and back (Sylice, 2026-11-17). Only the newest bar changes.
-function Sniper:GetHistoryBars(itemID)
+function Rapid:GetHistoryBars(itemID)
 	local slotLength = HISTORY_SECONDS / HISTORY_BARS
 	local current = math.floor(GetTime() / slotLength)
 	local bars = {}
@@ -178,7 +178,7 @@ local function HidePopup()
 end
 
 local function UpdatePopup()
-	local quantity, total = Sniper:GetDeal(popupItemID)
+	local quantity, total = Rapid:GetDeal(popupItemID)
 	popup.icon:SetTexture(PC.Items:GetIcon(popupItemID) or 134400)
 	popup.title:SetText(ItemName(popupItemID))
 	popup.text:SetText(string.format("%d at <= %s  -  total %s", quantity,
@@ -218,7 +218,7 @@ end
 local function OfferNext()
 	if popupItemID then return end
 	for _, entry in ipairs(ActiveItems()) do
-		if Sniper:GetDeal(entry.itemID) > 0 then
+		if Rapid:GetDeal(entry.itemID) > 0 then
 			ShowPopup(entry.itemID)
 			return
 		end
@@ -247,7 +247,7 @@ local function Evaluate(itemID)
 	if Refresh then Refresh() end
 	if pending then return end
 	if popupItemID == itemID and not popup.flashing then
-		if Sniper:GetDeal(itemID) > 0 then UpdatePopup() else Flash("Opportunity gone") end
+		if Rapid:GetDeal(itemID) > 0 then UpdatePopup() else Flash("Opportunity gone") end
 	elseif not popupItemID then
 		OfferNext()
 	end
@@ -293,7 +293,7 @@ end
 
 local function Buy()
 	if pending or not popupItemID or popup.flashing then return end
-	local quantity, total = Sniper:GetDeal(popupItemID)
+	local quantity, total = Rapid:GetDeal(popupItemID)
 	if quantity == 0 then return end
 	local token = {}
 	pending = { itemID = popupItemID, quantity = quantity, expected = total, token = token }
@@ -363,9 +363,9 @@ local function UpdateStatus()
 	if not statusText then return end
 	local active = #ActiveItems()
 	if running then
-		local effective = Sniper:GetEffectiveInterval(active)
+		local effective = Rapid:GetEffectiveInterval(active)
 		local limited = effective > Data().interval and (" (min " .. effective .. " s for " .. active .. " items)") or ""
-		statusText:SetText(string.format("Sniping %d, each every %s%s", active, DurationText(effective), limited))
+		statusText:SetText(string.format("RapidFire: %d items, each every %s%s", active, DurationText(effective), limited))
 		startButton:SetText("Stop")
 	else
 		statusText:SetText("Stopped.")
@@ -391,10 +391,10 @@ local function Tick(myGeneration)
 			queueIndex = queueIndex % #active + 1
 			Search(active[queueIndex].itemID)
 		end
-		spacing = Sniper:GetSpacing(#active)
+		spacing = Rapid:GetSpacing(#active)
 	end
 	UpdateStatus()
-	C_Timer.After(spacing, function() PC:Call("sniper", Tick, myGeneration) end)
+	C_Timer.After(spacing, function() PC:Call("rapidfire", Tick, myGeneration) end)
 end
 
 -- Restarts the search timing now (interval changed, popup shown or closed).
@@ -417,13 +417,13 @@ function Stop(reason)
 	if pending then Abandon("purchase stopped.", not pending.confirmed) end
 	HidePopup()
 	UpdateStatus()
-	if reason then PC:Print("sniping stopped: " .. reason) end
+	if reason then PC:Print("RapidFire stopped: " .. reason) end
 end
 
-function Sniper:IsRunning() return running end
-function Sniper:GetPopupItem() return popupItemID end
-function Sniper:IsFlashing() return popup and popup.flashing end
-function Sniper:IsBuying() return pending ~= nil end
+function Rapid:IsRunning() return running end
+function Rapid:GetPopupItem() return popupItemID end
+function Rapid:IsFlashing() return popup and popup.flashing end
+function Rapid:IsBuying() return pending ~= nil end
 
 PC:RegisterEvent("AUCTION_HOUSE_CLOSED", function()
 	if running then Stop() end
@@ -436,7 +436,7 @@ end)
 
 -- Adds an item by ID. Only stackable goods (the AH sells them by quantity); while the item's data is still loading
 -- (stack size unknown) it is added.
-function Sniper:AddItem(itemID)
+function Rapid:AddItem(itemID)
 	itemID = tonumber(itemID)
 	if not itemID then return end
 	local data = Data()
@@ -453,7 +453,7 @@ function Sniper:AddItem(itemID)
 		return
 	end
 	if PC.Items:GetStackSize(itemID) == 1 then
-		PC:Print("only stackable goods (reagents, cloth, bars...) can be sniped for now.")
+		PC:Print("only stackable goods (reagents, cloth, bars...) can be watched for now.")
 		return
 	end
 	table.insert(data.items, { itemID = itemID, max = 0, on = true })
@@ -466,7 +466,7 @@ local function AddFromCursor()
 	local kind, itemID = GetCursorInfo()
 	if kind == "item" and itemID then
 		ClearCursor()
-		Sniper:AddItem(itemID)
+		Rapid:AddItem(itemID)
 	end
 end
 
@@ -474,7 +474,7 @@ end
 -- shift-clicks go through ChatFrameUtil.InsertLink, Blizzard_ChatFrameBase/Mainline/ChatFrameUtilOverrides.lua).
 if type(ChatFrameUtil) == "table" and type(ChatFrameUtil.InsertLink) == "function" then
 	hooksecurefunc(ChatFrameUtil, "InsertLink", function(text)
-		PC:Call("sniper link", function()
+		PC:Call("rapidfire link", function()
 			if idBox and idBox:HasFocus() and type(text) == "string" then
 				local itemID = text:match("item:(%d+)")
 				if itemID then idBox:SetText(itemID) end
@@ -490,7 +490,7 @@ end
 local function MoneyInput(name, parent, onChange)
 	local input = CreateFrame("Frame", name, parent, "MoneyInputFrameTemplate")
 	MoneyInputFrame_SetOnValueChangedFunc(input, function()
-		if not input.updating then PC:Call("sniper money", onChange, MoneyInputFrame_GetCopper(input)) end
+		if not input.updating then PC:Call("rapidfire money", onChange, MoneyInputFrame_GetCopper(input)) end
 	end)
 	return input
 end
@@ -538,7 +538,7 @@ local function CreateRow(index, parent)
 	row.name:SetSize(100, ROW_HEIGHT)
 	row.name:SetJustifyH("LEFT")
 	row.name:SetPoint("LEFT", 42, 0)
-	row.max = MoneyInput("ProfitCraftSniperMax" .. index, row, function(copper)
+	row.max = MoneyInput("ProfitCraftRapidFireMax" .. index, row, function(copper)
 		local entry = Data().items[index]
 		if entry then entry.max = copper end
 		Refresh()
@@ -567,7 +567,7 @@ end
 -- The history panel: a bar chart of the cheapest price at each check (last 15 minutes, in time slots), the max price
 -- as a line, and the numbers below it.
 local function CreateHistoryPanel()
-	historyPanel = PC:CreateWindow("ProfitCraftSniperHistory", panel, 300, 538, "Price history")
+	historyPanel = PC:CreateWindow("ProfitCraftRapidFireHistory", panel, 300, 538, "Price history")
 	historyPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 2, 0)
 	local inset = historyPanel.Inset
 	historyPanel.itemName = Label(inset, "", 10, -8, "GameFontNormal")
@@ -612,12 +612,12 @@ function UpdateHistoryPanel()
 		return
 	end
 	historyPanel.itemName:SetText(ItemName(itemID))
-	local stats = Sniper:GetHistoryStats(itemID)
+	local stats = Rapid:GetHistoryStats(itemID)
 	if not stats then
-		historyPanel.stats:SetText("No checks yet. Start sniping to collect prices.")
+		historyPanel.stats:SetText("No checks yet. Press Start to collect prices.")
 		return
 	end
-	local slots = Sniper:GetHistoryBars(itemID)
+	local slots = Rapid:GetHistoryBars(itemID)
 	local max = Entry(itemID) and Entry(itemID).max or 0
 	local low, high = stats.low, math.max(stats.high, max)
 	if max > 0 then low = math.min(low, max) end
@@ -691,7 +691,7 @@ local function CreateIntervalSlider(parent, y)
 	slider:Init(IntervalPosition(), 1, #INTERVALS, #INTERVALS - 1, { [MinimalSliderWithSteppersMixin.Label.Right] =
 		function(position) return DurationText(INTERVALS[math.floor(position + 0.5)]) end })
 	slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, position)
-		PC:Call("sniper interval", function()
+		PC:Call("rapidfire interval", function()
 			Data().interval = INTERVALS[math.floor(position + 0.5)]
 			UpdateStatus()
 			Reschedule()  -- takes effect now
@@ -724,12 +724,12 @@ local function CreateKeyButton(parent)
 end
 
 local function CreatePanel()
-	panel = PC:CreateWindow("ProfitCraftSniper", AuctionHouseFrame, 440, 538, "ProfitCraft Sniper")
+	panel = PC:CreateWindow("ProfitCraftRapidFire", AuctionHouseFrame, 440, 538, "ProfitCraft RapidFire")
 	panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 2, 0)
 	local inset = panel.Inset
 	inset:EnableMouse(true)
-	inset:SetScript("OnReceiveDrag", function() PC:Call("sniper drop", AddFromCursor) end)
-	inset:SetScript("OnMouseUp", function() PC:Call("sniper drop", AddFromCursor) end)
+	inset:SetScript("OnReceiveDrag", function() PC:Call("rapidfire drop", AddFromCursor) end)
+	inset:SetScript("OnMouseUp", function() PC:Call("rapidfire drop", AddFromCursor) end)
 
 	Label(inset, "WATCH LIST", 10, -6, "GameFontNormal")
 	local hint = inset:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -745,23 +745,23 @@ local function CreatePanel()
 	idBox:SetAutoFocus(false)
 	idBox:SetNumeric(true)
 	local function AddTyped()
-		Sniper:AddItem(idBox:GetText())
+		Rapid:AddItem(idBox:GetText())
 		idBox:SetText("")
 		idBox:ClearFocus()
 	end
-	idBox:SetScript("OnEnterPressed", function() PC:Call("sniper add", AddTyped) end)
+	idBox:SetScript("OnEnterPressed", function() PC:Call("rapidfire add", AddTyped) end)
 	local addButton = CreateFrame("Button", nil, inset, "UIPanelButtonTemplate")
 	addButton:SetSize(50, 20)
 	addButton:SetPoint("LEFT", idBox, "RIGHT", 6, 0)
 	addButton:SetText("Add")
-	addButton:SetScript("OnClick", function() PC:Call("sniper add", AddTyped) end)
+	addButton:SetScript("OnClick", function() PC:Call("rapidfire add", AddTyped) end)
 	local addHint = inset:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	addHint:SetPoint("LEFT", addButton, "RIGHT", 8, 0)
 	addHint:SetText("or drop / shift-click an item")
 
 	y = y - 32
 	local keepLabel = Label(inset, "Keep at least", 10, y - 4)
-	keepInput = MoneyInput("ProfitCraftSniperKeep", inset, function(copper) Data().minBalance = copper end)
+	keepInput = MoneyInput("ProfitCraftRapidFireKeep", inset, function(copper) Data().minBalance = copper end)
 	keepInput:SetPoint("LEFT", keepLabel, "RIGHT", 10, 0)
 	SetMoney(keepInput, Data().minBalance)
 
@@ -779,27 +779,27 @@ local function CreatePanel()
 	keyButton = CreateKeyButton(inset)
 	keyButton:SetPoint("TOPLEFT", 160, y)
 
-	-- Bottom line: Start/Stop and the status.
+	-- Bottom line: the status, and Start/Stop at the right (Sylice, 2026-11-17).
 	startButton = CreateFrame("Button", nil, inset, "UIPanelButtonTemplate")
 	startButton:SetSize(80, 22)
-	startButton:SetPoint("BOTTOMLEFT", 8, 8)
+	startButton:SetPoint("BOTTOMRIGHT", -8, 8)
 	startButton:SetScript("OnClick", function()
-		PC:Call("sniper start", function() if running then Stop() else Start() end end)
+		PC:Call("rapidfire start", function() if running then Stop() else Start() end end)
 	end)
 	statusText = inset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	statusText:SetPoint("LEFT", startButton, "RIGHT", 10, 0)
-	statusText:SetPoint("RIGHT", inset, "RIGHT", -8, 0)
+	statusText:SetPoint("LEFT", inset, "BOTTOMLEFT", 10, 19)
+	statusText:SetPoint("RIGHT", startButton, "LEFT", -10, 0)
 	statusText:SetJustifyH("LEFT")
 
 	CreateHistoryPanel()
-	historyPanel:Show()  -- PC:CreateWindow creates windows hidden; it shows and hides with the Sniper panel (its parent)
+	historyPanel:Show()  -- PC:CreateWindow creates windows hidden; it shows and hides with the RapidFire panel (its parent)
 	panel:HookScript("OnShow", Refresh)
 	historyPanel:HookScript("OnShow", UpdateHistoryPanel)
 	selectedItemID = selectedItemID or (Data().items[1] and Data().items[1].itemID)
 end
 
 local function CreatePopup()
-	popup = CreateFrame("Frame", "ProfitCraftSniperPopup", UIParent, "BasicFrameTemplateWithInset")
+	popup = CreateFrame("Frame", "ProfitCraftRapidFirePopup", UIParent, "BasicFrameTemplateWithInset")
 	popup:SetSize(360, 140)
 	popup:SetFrameStrata("DIALOG")
 	popup:SetClampedToScreen(true)
@@ -813,7 +813,7 @@ local function CreatePopup()
 		Data().popupPosition = { x = x, y = y }  -- remembered from now on
 	end)
 	popup:Hide()
-	popup.TitleText:SetText("ProfitCraft Sniper")
+	popup.TitleText:SetText("ProfitCraft RapidFire")
 	popup.icon = popup:CreateTexture(nil, "ARTWORK")
 	popup.icon:SetSize(32, 32)
 	popup.icon:SetPoint("TOPLEFT", 14, -32)
@@ -826,7 +826,7 @@ local function CreatePopup()
 	buyButton = CreateFrame("Button", BUY_BUTTON_NAME, popup, "UIPanelButtonTemplate")
 	buyButton:SetSize(220, 32)
 	buyButton:SetPoint("BOTTOM", 0, 12)
-	buyButton:SetScript("OnClick", function() PC:Call("sniper buy", Buy) end)
+	buyButton:SetScript("OnClick", function() PC:Call("rapidfire buy", Buy) end)
 	popup:SetScript("OnHide", ClearBinding)
 	popup.CloseButton:SetScript("OnClick", function()
 		HidePopup()
@@ -838,9 +838,9 @@ local function CreateToggle()
 	toggleButton = CreateFrame("Button", nil, AuctionHouseFrame, "UIPanelButtonTemplate")
 	toggleButton:SetSize(80, 22)
 	toggleButton:SetPoint("BOTTOMRIGHT", AuctionHouseFrame, "BOTTOMRIGHT", -6, 4)
-	toggleButton:SetText("Sniper")
+	toggleButton:SetText("RapidFire")
 	toggleButton:SetScript("OnClick", function()
-		PC:Call("sniper panel", function()
+		PC:Call("rapidfire panel", function()
 			if not panel then CreatePanel() end
 			panel:SetShown(not panel:IsShown())
 		end)

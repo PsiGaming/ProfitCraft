@@ -56,15 +56,15 @@ PC:RegisterEvent("ADDON_LOADED", function(name)
 	-- products of every recipe seen on the account, and the time of ProfitCraft's own last full scan.
 	db.snapshot = type(db.snapshot) == "table" and db.snapshot or {}
 	db.recipeItems = type(db.recipeItems) == "table" and db.recipeItems or {}
-	-- Sniper (UI/Sniper.lua), account-wide: watch list { itemID, max (copper per unit), on }, the money to keep,
+	-- RapidFire (UI/Rapid.lua), account-wide: watch list { itemID, max (copper per unit), on }, the money to keep,
 	-- seconds between checks of each item, sound, buy key.
-	local sniper = type(db.sniper) == "table" and db.sniper or {}
-	sniper.items = type(sniper.items) == "table" and sniper.items or {}
-	sniper.minBalance = sniper.minBalance or 2500
-	sniper.interval = sniper.interval or 5
-	if sniper.sound == nil then sniper.sound = true end
-	sniper.key = sniper.key or "SPACE"
-	db.sniper = sniper
+	local rapidFire = type(db.rapidFire) == "table" and db.rapidFire or {}
+	rapidFire.items = type(rapidFire.items) == "table" and rapidFire.items or {}
+	rapidFire.minBalance = rapidFire.minBalance or 2500
+	rapidFire.interval = rapidFire.interval or 5
+	if rapidFire.sound == nil then rapidFire.sound = true end
+	rapidFire.key = rapidFire.key or "SPACE"
+	db.rapidFire = rapidFire
 	ProfitCraftDB = db
 	PC.db = db
 	PC:Send("DATA_READY")

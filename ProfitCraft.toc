@@ -23,5 +23,5 @@ UI/RecipeTooltip.lua
 UI/Bags.lua
 UI/BagSpace.lua
 UI/MoneyWindow.lua
-UI/Sniper.lua
+UI/Rapid.lua
 UI/Settings.lua

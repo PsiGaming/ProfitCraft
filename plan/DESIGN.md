@@ -49,7 +49,7 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 | `UI/RecipeTooltip.lua` | Window | Cost and profit lines on trainer tooltips (Spell tooltip data, id = recipe ID) and recipe item tooltips (the ItemSpellTriggerLearn line's spellID = recipe ID); uses `Recipes:Load` and `Profit:Evaluate`. BoP products: no sale lines |
 | `UI/Bags.lua` | Window | "D/E Bags": disenchantable items in the bags with disenchant / AH / merchant values |
 | `Scan.lua` | Data | AH scan data (0.2, section 9): follows Auctionator's scans or runs its own full scan (button on the AH window), keeps the snapshot of recipe items |
-| `UI/Sniper.lua` | Window | Sniper (0.2-beta.3): "Sniper" button on the AH window, watch list panel, live commodity searches, deal popup with the buy key, purchase with quote check (FEATURES.md "Watch list & quick buy") |
+| `UI/Rapid.lua` | Window | RapidFire (0.2-beta.3): "RapidFire" button on the AH window, watch list panel, live commodity searches, deal popup with the buy key, purchase with quote check (FEATURES.md "Watch list & quick buy") |
 | `UI/MoneyWindow.lua` | Window | Currencies bar (code name: money window): money and up to 5 tracked currencies, right-click menu (0.2) |
 | `UI/BagSpace.lua` | Window | Free bag slots split as (reagent\|normal) on the reagent bag or backpack button |
 | `UI/Settings.lua` | Window | The settings page, shown in our own window and in Blizzard's Options > AddOns |
