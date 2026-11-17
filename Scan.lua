@@ -20,6 +20,7 @@ PC.Scan = Scan
 local MAX_LEVELS = 40         -- cheapest price levels kept per item
 local BATCH = 1000            -- listings read per frame, so the game doesn't stall
 local FULL_SCAN_GAP = 15 * 60 -- seconds between full scans of our own
+local LOAD_TIMEOUT = 10        -- seconds to wait for incomplete listings' item data
 
 local reading  -- state while a scan is awaited or read
 
@@ -82,8 +83,10 @@ local function Finish()
 		kept = kept + 1
 	end
 	PC.db.snapshot[Scan:RulesetKey()] = { time = r.time, levels = levels, totals = totals }
+	local incomplete = r.pendingCount > 0
+		and string.format(" %d listings stayed incomplete and were left out.", r.pendingCount) or ""
 	PC:Print(string.format("scan read: %s listings, prices for %d of your recipe items (%d of your own listings "
-		.. "left out).", BreakUpLargeNumbers(r.count), kept, r.ownSkipped))
+		.. "left out).%s", BreakUpLargeNumbers(r.count), kept, r.ownSkipped, incomplete))
 	if next(r.wanted) == nil then
 		PC:Print("open each of your professions once, so ProfitCraft knows which items to keep from the next scan.")
 	end
@@ -97,37 +100,70 @@ local function Finish()
 	PC:Send("SCAN_CHANGED")
 end
 
+-- Adds one listing (index into the game's scan list) to the snapshot being built. A listing of a recipe item that
+-- the game delivers incomplete (hasAllInfo false) is read again once its item data has loaded, as Auctionator
+-- does (Source_ModernAH/FullScan/Mixins/Frame.lua, ProcessBatch); everything else is used right away.
+local function ReadListing(r, index, retry)
+	local _, _, count, _, _, _, _, _, _, buyout, _, _, _, owner, ownerFull, _, itemID, hasAllInfo =
+		C_AuctionHouse.GetReplicateItemInfo(index)
+	if r.first and ((owner and owner:find(r.first, 1, true)) or (ownerFull and ownerFull:find(r.first, 1, true))) then
+		r.ownForms[ownerFull or owner] = true
+	end
+	if not (itemID and r.wanted[itemID]) then return end
+	if not hasAllInfo and not retry then
+		r.pending[index] = itemID
+		r.pendingCount = r.pendingCount + 1
+		C_Item.RequestLoadItemDataByID(itemID)
+		return
+	end
+	if not (buyout and buyout > 0 and count and count > 0) then return end
+	if (owner and r.own[owner]) or (ownerFull and r.own[ownerFull]) then
+		r.ownSkipped = r.ownSkipped + 1
+		return
+	end
+	local price = math.floor(buyout / count + 0.5)
+	local byPrice = r.items[itemID]
+	if not byPrice then
+		byPrice = {}
+		r.items[itemID] = byPrice
+	end
+	byPrice[price] = (byPrice[price] or 0) + count
+end
+
+-- Done once every listing is read and no incomplete one is still waiting (or the wait timed out).
+local function FinishWhenComplete(r)
+	if reading == r and r.next >= r.count and r.pendingCount == 0 then Finish() end
+end
+
 local function ReadBatch()
 	local r = reading
 	if not r then return end  -- AH closed meanwhile
 	local last = math.min(r.next + BATCH, r.count) - 1
-	for i = r.next, last do
-		local _, _, count, _, _, _, _, _, _, buyout, _, _, _, owner, ownerFull, _, itemID =
-			C_AuctionHouse.GetReplicateItemInfo(i)
-		if r.first and ((owner and owner:find(r.first, 1, true)) or (ownerFull and ownerFull:find(r.first, 1, true))) then
-			r.ownForms[ownerFull or owner] = true
-		end
-		if itemID and r.wanted[itemID] and buyout and buyout > 0 and count and count > 0 then
-			if (owner and r.own[owner]) or (ownerFull and r.own[ownerFull]) then
-				r.ownSkipped = r.ownSkipped + 1
-			else
-				local price = math.floor(buyout / count + 0.5)
-				local byPrice = r.items[itemID]
-				if not byPrice then
-					byPrice = {}
-					r.items[itemID] = byPrice
-				end
-				byPrice[price] = (byPrice[price] or 0) + count
-			end
-		end
-	end
+	for i = r.next, last do ReadListing(r, i) end
 	r.next = last + 1
-	if r.next >= r.count then
-		Finish()
-	else
+	if r.next < r.count then
 		C_Timer.After(0, function() PC:Call("read scan", ReadBatch) end)
+	elseif r.pendingCount > 0 then
+		C_Timer.After(LOAD_TIMEOUT, function()
+			if reading == r then Finish() end  -- give up on what never loaded
+		end)
+	else
+		Finish()
 	end
 end
+
+PC:RegisterEvent("ITEM_DATA_LOAD_RESULT", function(itemID)
+	local r = reading
+	if not (r and r.pending and r.pendingCount > 0) then return end
+	for index, pendingItemID in pairs(r.pending) do
+		if pendingItemID == itemID then
+			r.pending[index] = nil
+			r.pendingCount = r.pendingCount - 1
+			ReadListing(r, index, true)
+		end
+	end
+	FinishWhenComplete(r)
+end)
 
 -- A full scan has been requested (by Auctionator or by us): wait for the game's data.
 local function Await(message)
@@ -146,6 +182,7 @@ PC:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE", function()
 	reading.wanted = PC.db.recipeItems
 	reading.own, reading.first = own, first
 	reading.items, reading.ownForms, reading.ownSkipped = {}, {}, 0
+	reading.pending, reading.pendingCount = {}, 0
 	ReadBatch()
 end)
 
