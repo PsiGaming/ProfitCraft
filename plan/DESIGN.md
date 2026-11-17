@@ -48,7 +48,7 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 | `UI/Tooltip.lua` | Window | Disenchant line in item tooltips |
 | `UI/RecipeTooltip.lua` | Window | Cost and profit lines on trainer tooltips (Spell tooltip data, id = recipe ID) and recipe item tooltips (the ItemSpellTriggerLearn line's spellID = recipe ID); uses `Recipes:Load` and `Profit:Evaluate`. BoP products: no sale lines |
 | `UI/Bags.lua` | Window | "D/E Bags": disenchantable items in the bags with disenchant / AH / merchant values |
-| `UI/BagSpace.lua` | Window | Free-slot count on the reagent bag button |
+| `UI/BagSpace.lua` | Window | Free bag slots split as (reagent\|normal) on the reagent bag or backpack button |
 | `UI/Settings.lua` | Window | The settings page, shown in our own window and in Blizzard's Options > AddOns |
 | `Sources/Scan.lua`, `Sources/Merchant.lua` | Source | Milestone 2 (not built): our own AH scan and merchant buy-price recording |
 
@@ -102,7 +102,7 @@ ProfitCraftDB = {
     ahCut = 0.05,                 -- AH cut on sales
     panelShown = true,            -- side panel open next to the profession window
     tooltipDisenchant = false,    -- disenchant line in item tooltips (off by default from alpha.4, as in Auctionator)
-    reagentBagFreeSlots = false,  -- free-slot count on the reagent bag button
+    freeSlots = "none",           -- ProfitCraft's free-slot split: "none" | "reagent" (on the reagent bag button) | "backpack" (in place of Blizzard's count); was reagentBagFreeSlots (true -> "reagent") until database version 2 (rc.0)
   },
   errors   = { ... },   -- error log: the last 50 caught errors (message, where, time, ProfitCraft version), newest first; repeats of the same error only increase a count
   rulesets = {          -- milestone 2: our own AH data, per ruleset (see below)
@@ -149,16 +149,18 @@ All windows use Blizzard's current templates (all present in the Forever source)
 **D/E Bags window** (`/pcraft bags`, or the panel's D/E Bags button)
 - Movable `ButtonFrameTemplate` window, closes with Escape. Lists every disenchantable item in the bags (backpack, bags 1-4 and reagent bag: `Enum.BagIndex.Backpack` .. `NUM_TOTAL_EQUIPPED_BAG_SLOTS`), combined per item, with disenchant value, AH price (none for soulbound items) and merchant price per item; the option that pays most after the AH cut is marked. Refreshes on `BAG_UPDATE_DELAYED` and price changes.
 
-**Reagent bag free slots**
-- "(n)" on the reagent bag button (`CharacterReagentBag0Slot`, `Enum.BagIndex.ReagentBag` = 5; Forever has one reagent bag slot), styled like Blizzard's backpack count (`NumberFontNormal`, 10 px below centre). Drawn on our own overlay frame; Blizzard's button is untouched. Off by default; hidden without a reagent bag. Updates one frame after `BAG_UPDATE_DELAYED`, like Blizzard's own count.
-- The normal bags use Blizzard's own option (Options > Interface, "Show Free Bag Space", game setting `displayFreeBagSlots`), which ProfitCraft's settings mirror (below).
+**Free bag slots** (rc.0; replaced alpha.0's reagent bag count)
+- Blizzard's count on the backpack (Options > Interface, "Show Free Bag Space", game setting `displayFreeBagSlots`; `C_Container.CalculateTotalNumberOfFreeBagSlots()`) is one total that includes the reagent bag (Sylice in game, 2026-11-17). ProfitCraft splits that total as "(reagent|normal)": reagent = the reagent bag's free slots, normal = Blizzard's total minus that, so the two always add up to Blizzard's number. Order as on the bag bar (reagent bag on the left, Sylice). Without a reagent bag: "(normal)".
+- One settings dropdown sets both Blizzard's setting and ours (`freeSlots`): Off (Blizzard off, `none`), Blizzard only (on, `none`), ProfitCraft + Blizzard (on, `reagent`: the split on `CharacterReagentBag0Slot`, nothing there without a reagent bag), ProfitCraft only (on, `backpack`: the split on `MainMenuBarBackpackButton`).
+- "ProfitCraft only" hides Blizzard's count by setting its text (`MainMenuBarBackpackButton.FreeSlots`) to alpha 0 and **keeps Blizzard's setting on**, so Blizzard's count is back as soon as ProfitCraft is disabled or removed (Sylice's requirement). Blizzard only shows/hides that text (`MainMenuBarBackpackMixin:SetCountShown`, Forever source `Blizzard_MainMenuBarBagButtons/Shared/MainMenuBarBagButtons.lua`), never changes its alpha. Restored to alpha 1 when another choice is picked.
+- Styled like Blizzard's count (`NumberFontNormal`, "(n)", 10 px below centre), drawn on our own overlay frames. Updates one frame after `BAG_UPDATE_DELAYED`, like Blizzard's own count.
 
 **Settings**
 - One list of options, built into two identical pages (approach seen in Questie, `addons/reference/Questie`, `Modules/Options/QuestieOptionsEngine.lua`; our own code):
   - ProfitCraft's own movable window (`/pcraft settings`, or the panel's Settings button). Closing it just closes it: it never goes through Blizzard's settings panel, whose close always reopens the game menu (Forever source: `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`). Closes with Escape (`UISpecialFrames`).
   - The same page under Blizzard's Options > AddOns > ProfitCraft (`Settings.RegisterCanvasLayoutCategory` + `Settings.RegisterAddOnCategory`, Forever source). Closing that returns to the game menu, which is where the user came from.
 - Each page re-reads the values when shown and after any change (`SETTINGS_CHANGED`, and `CVAR_UPDATE` for the mirrored game setting), so the two never disagree.
-- Options (beta.0), in three sections separated by divider lines: (1) price warning age slider and disenchant tooltip line, (2) the two bag free-slot options, (3) debug mode. Details: disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); price warning age (slider Off/1/2/3/4 days, default 2; Blizzard's `MinimalSliderWithSteppersTemplate`); free slots on the backpack button (mirrors Blizzard's `displayFreeBagSlots`, read and written with `C_CVar`); free slots on the reagent bag button (off); debug mode (off).
+- Options (beta.0), in three sections separated by divider lines: (1) price warning age slider and disenchant tooltip line, (2) free bag slots (a dropdown since rc.0), (3) debug mode. Details: disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); price warning age (slider Off/1/2/3/4 days, default 2; Blizzard's `MinimalSliderWithSteppersTemplate`); free bag slots (dropdown: Off / Blizzard only / ProfitCraft + Blizzard / ProfitCraft only, default Off; writes Blizzard's `displayFreeBagSlots` with `C_CVar` and ProfitCraft's `freeSlots`, see "Free bag slots" above); debug mode (off).
 
 ## 8. Slash command
 
@@ -198,7 +200,8 @@ Results from PsiLab (2026-11-13) are in `knowledge/forever-vs-vanilla.md`, "Addo
 - [ ] `GetAuctionAgeByItemID` unit: returned 0 for prices from the same day; check again the day after a scan (expected: 1).
 - [ ] AH cut on sale is 5%.
 - [ ] Is the AH shared between Horde and Alliance? Assumed not. Only matters for 0.2 (own scan data).
-- [ ] Does Blizzard's free-bag-space number on the backpack also count the reagent bag?
+- [x] Blizzard's free-bag-space number on the backpack also counts the reagent bag (Sylice in game, 2026-11-17). Led to the rc.0 split.
+- [ ] rc.0 in game: "(6|24)" fits on the reagent bag button; "ProfitCraft only" really hides Blizzard's count (relies on Forever loading `Shared/MainMenuBarBagButtons.lua`, inferred from its `.toc`, where camelot-specific files are separate) and it returns when another choice is picked.
 - [x] Disenchant: item level decides the materials (Forever client's table is ordered by item level, forevermastery.com; all Classic sources agree). 2026-11-13, section 12.
 - [x] Essences convert both ways (3 lesser <-> 1 greater), repeatedly. Sylice in game, 2026-11-13.
 - [ ] Disenchant odds on Forever match the Classic table (section 12; quick check: a green weapon of item level 21-30 gives Greater Magic Essence, not Astral).

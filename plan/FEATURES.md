@@ -24,7 +24,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 
 ## Version 0.1, added before the first install (2026-11-13)
 
-- [x] **Reagent bag free slots, off by default**: "(n)" on the reagent bag button, styled like Blizzard's backpack count. The normal bags use Forever's built-in "Show Free Bag Space" option (Options > Interface; one total on the backpack button), which Sylice uses for the normal bags (2026-11-13). Not checked: whether Blizzard's total also counts the reagent bag (if it does, the reagent slots are counted in both numbers).
+- [x] **Reagent bag free slots, off by default**: "(n)" on the reagent bag button, styled like Blizzard's backpack count. The normal bags use Forever's built-in "Show Free Bag Space" option (Options > Interface; one total on the backpack button), which Sylice uses for the normal bags (2026-11-13). Blizzard's total turned out to include the reagent bag (Sylice, 2026-11-17); replaced in 0.1-rc.0 (below).
 - [x] **Settings window brought forward from 0.3** (our own window, see Requirements): disenchant tooltip line, reagent bag free slots, debug mode. `/pcraft settings` or the side panel's "Settings" button.
 
 ## Version 0.1-alpha.1 (fixes after Sylice's first test, 2026-11-13)
@@ -35,6 +35,10 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] A ProfitCraft tab at the bottom of the profession window's side-tab column shows/hides the panel (lit while open).
 - [x] Profitable amounts show a green "+" (losses already showed a red "-").
 - [x] Disenchant lookup also tries Auctionator's item-link function when the item-ID one returns nothing. Every item showed "not disenchantable" in the first test; cause not confirmed (see open questions).
+
+## Version 0.1-rc.0 (2026-11-17; release candidate: the last fix before the final 0.1)
+
+- [x] **Free bag slots split** (Sylice, 2026-11-17). Blizzard's backpack count includes the reagent bag, so the reagent bag checkbox and the Blizzard-mirror checkbox are replaced by one dropdown, "Free bag slots": **Off**, **Blizzard only**, **ProfitCraft + Blizzard** ("(reagent|normal)" on the reagent bag button, Blizzard's total on the backpack) and **ProfitCraft only** ("(reagent|normal)" on the backpack in place of Blizzard's total). Reagent first, as the bags sit on the bar. "ProfitCraft only" hides Blizzard's number without turning Blizzard's option off, so the count comes back if ProfitCraft is disabled or removed. Installs that had the reagent bag count on start on "ProfitCraft + Blizzard". To check in game: whether "(6|24)" fits on the small reagent bag button.
 
 ## Version 0.1-beta.1 (2026-11-14)
 
@@ -94,6 +98,32 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [x] Settings window (our own; see Requirements). Done early, in 0.1; 0.3 adds more options to it.
 - [x] **Item tooltip prices**, with an on/off setting in the settings window (Sylice wants it, 2026-11-13). **One line per source, each with its own price and age** (e.g. "Auctionator: 1s 20c, updated today"; from 0.2 also "ProfitCraft scan: 1s 15c, 2 h ago"), like CraftProfit's tooltip, which shows Auctionator's price with its "Updated" age and its own scan separately. Possibly also merchant sell price, and for items you can craft: craft cost and profit (to decide before 0.3).
 
+## Price sharing (after our own AH scan: 0.3 or later; Sylice, 2026-11-14)
+
+- [ ] **Share the latest AH scan prices with other ProfitCraft users** through addon messages (invisible to players).
+- [ ] **Settings:** sharing on/off; **outgoing** and **incoming** separately (e.g. share outwards but never accept others' data).
+- [ ] **Who to share with**, each on/off: **Friends**, **Party**, **Guild**, **Custom** (a list of character names typed into a box).
+- Notes from the first look (2026-11-14), to settle before building:
+  - Forever has `C_ChatInfo.SendAddonMessage(prefix, message, chatType, target)` (Forever API docs); party and guild are channels, but there is no "friends" channel: each online friend (and each Custom name) gets messages one by one (whisper type). QuestTogether already uses party addon messages on Forever.
+  - **Volume:** a full scan is thousands of prices, and addon messages are small (255 bytes each) and rate-limited by the game (the API returns a "throttled" result). Needs compact encoding, sending in the background, and probably only prices newer than what the other side has.
+  - **Same AH only:** prices must be tagged with the AH they came from (ruleset/realm and faction, if the AH is per faction: still an open question) and ignored when they don't match the receiver's AH.
+  - **Trust:** received prices can be wrong or deliberately fake. Keep them apart from our own scan, use them only when newer than what we have, and never let them overwrite our own scan of the same day; show where a price came from.
+  - **Names:** Forever characters have first and last names (`UnitFullName` returns both, knowledge file); how names must be written for whispers and Custom-list matching is not known yet.
+  - **Protocol version** in every message, so older and newer ProfitCraft versions don't misread each other.
+  - **Protocol idea** (from a Claude web chat Sylice shared, 2026-11-14; matches the notes above): announce "I have a scan from time T" to the party when a scan ends or someone joins; whoever has older data asks for "everything after my time"; the sender sends only items scanned since then; the receiver keeps, per item, whichever price is newer and rejects bad data (non-numeric IDs, prices out of range, timestamps in the future).
+  - **Libraries** that would do the chunking, throttling, encoding and compression: AceComm (with ChatThrottleLib), LibSerialize, LibDeflate. Licences not yet checked for use in MIT ProfitCraft; using them is a choice to make (ProfitCraft is written from scratch, but libraries are not other addons).
+  - **APIs present in Forever's UI source** (checked 2026-11-14): `C_ChatInfo.InChatMessagingLockdown`, `C_FriendList.GetFriendInfo` / `GetFriendInfoByIndex`, `C_BattleNet.GetFriendGameAccountInfo`, `C_BattleNet.SendGameData` (Battle.net friends; the old `BNSendGameData` is only a deprecated wrapper on Forever, `Blizzard_DeprecatedBattleNet/Deprecated_BattleNet.lua`), `Ambiguate`. Presence in the source is not proof they behave as on Retail.
+  - **Sender names:** Retail sends "Name-Realm"; Forever characters have first and last names, so the format of `sender` and of friends-list names must be checked in game before any friends/Custom matching.
+
+## "On Sale" detector (possibly 0.4; Sylice, 2026-11-14)
+
+- [ ] **Spot listings far below their usual price** during ProfitCraft's own AH scan, e.g. level 20-30 mail "of the Knight" that usually sells for 1g+ listed at 10-20s, and list them in a separate **"On Sale" window** with the possible profit (usual price after the AH cut, minus the listing price).
+- Notes from the first look (2026-11-14):
+  - **Addons can't download anything while the game runs**, so "known data sources" can only come in two ways: (1) a snapshot of outside averages shipped inside the addon (stale between releases; needs a Forever source and permission to use its data; foreverdb.net shows per-realm price history from player scans, terms not checked), or (2) **ProfitCraft's own price history** from its scans (the "Price history" item under Future), helped by price sharing. (2) is the realistic base; (1) only to fill gaps, if at all.
+  - Needs the **own AH scan with individual listings** (0.2): Auctionator's API gives one price per item, not the listings.
+  - **Random suffixes** ("of the Knight", "of the Bear", ...) share one item ID but sell for different prices, so the history must be kept per item **and suffix**. Auctionator handles suffixes for Vanilla-type games (`Data_Vanilla/Suffixes.lua`); how suffixes appear in Forever's item links and AH results is not checked yet.
+  - "Usual price" should be robust against bait listings and sparse data: e.g. the median of recent days, only when there are enough days/listings, and a minimum discount (e.g. 50% below) before an item counts as "on sale".
+
 ## Later / maybe
 
 - [x] Price-age warnings ("this price is 9 days old"). From Auctionator's age function when its price is used; from our own scan time otherwise.
@@ -101,7 +131,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 - [ ] Minimap button (not in 0.1; to be decided later).
 - [ ] Profit tags in Blizzard's recipe list: a small profit number next to each recipe name in the list on the left, like CraftProfit's. Separate from the recipe-details profit (0.1) and the side panel.
 
-- [ ] **Listing deposit risk** (moved here 2026-11-13): show the 1s-per-listing deposit as money at risk if an item doesn't sell, per item and per stack, with the break-even quantity (e.g. "Cured Light Hide: 1 = −40c, stack of 20 = +9s, profitable from 3"). Left out of the main profit because the deposit is refunded on sale.
+- [ ] **Listing deposit risk** (moved here 2026-11-13): show the listing deposit as money at risk if an item doesn't sell, per item and per stack, with the break-even quantity (e.g. "Cured Light Hide: 1 = −40c, stack of 20 = +9s, profitable from 3"). Left out of the main profit because the deposit is refunded on sale. Less relevant since Forever dropped the 1s minimum deposit (Sylice, 2026-11-17): the example above assumed it.
 
 ## Future (set aside)
 
@@ -118,11 +148,11 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 
 The deposit questions only matter for the "Listing deposit risk" item in "Later / maybe".
 
-- [ ] **Does a stack count as one listing?** Does posting 20 or 40 Cured Light Hides at once cost 1s or more? Likely one deposit (Retail's commodity rule), untested in Forever. Sylice to test in game.
-- [ ] **Is the deposit refunded on sale?** Web sources say yes; check in game (list a cheap item, see whether the 1s comes back with the sale money). If yes, the deposit only costs money on unsold auctions.
+- [ ] **Does a stack count as one listing?** Does posting 20 or 40 Cured Light Hides at once pay one deposit or one per item? Likely one deposit (Retail's commodity rule), untested in Forever. Sylice to test in game.
+- [ ] **Is the deposit refunded on sale?** Web sources say yes; check in game (list a cheap item, see whether the deposit comes back with the sale money). If yes, the deposit only costs money on unsold auctions.
 - [ ] **Unsold auctions: deposit lost or refunded?** Web sources disagree; treat as lost until seen.
 - [ ] **Can buyers take part of a listing?** CraftProfit's 0.5.2 changelog mentions buying "1 of 860 Copper Rods" from a grouped row, which suggests partial buys.
-- [ ] **The deposit above the 1s minimum** (item value? auction length?), and whether the 1s minimum changes to 1c (discussed by a developer, no patch note found).
+- [ ] **How the deposit is calculated** (item value? auction length?). The 1s minimum is gone (Sylice, 2026-11-17).
 - [ ] **Is the AH cut 5% in Forever?** Web sources say yes; not yet confirmed in game.
 - [ ] **Can an addon ask Forever's AH what the deposit will be?** Check with an in-game command when building starts.
 - [x] **Why Auctionator gave no disenchant values:** its disenchant prices only cover later expansions, not Forever (Sylice, 2026-11-13). ProfitCraft builds its own estimate next; see `DESIGN.md` section 12.

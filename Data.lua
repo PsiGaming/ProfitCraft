@@ -3,7 +3,7 @@
 
 local ADDON_NAME, PC = ...
 
-local DB_VERSION = 1
+local DB_VERSION = 2
 
 local DEFAULT_SETTINGS = {
 	debug = false,        -- show errors in chat as they happen
@@ -11,12 +11,19 @@ local DEFAULT_SETTINGS = {
 	ahCut = 0.05,         -- share of the sale price the AH keeps (web sources: 5%; to confirm in game)
 	panelShown = true,    -- side panel open next to the profession window
 	tooltipDisenchant = false, -- disenchant estimate line in item tooltips (off by default, as in Auctionator)
-	reagentBagFreeSlots = false, -- free slots on the reagent bag button (off by default)
+	freeSlots = "none",   -- ProfitCraft's free bag slot count: "none", "reagent" or "backpack" (UI/BagSpace.lua)
 	staleDays = 2,        -- side panel warns when AH prices are this many days old; 0 = off
 }
 
 -- upgrades[n] turns a version n-1 database into version n.
 local upgrades = {}
+
+-- 0.1-rc.0: the reagent bag checkbox became the free bag slots choice; "on" keeps the count on the reagent bag.
+upgrades[2] = function(db)
+	if type(db.settings) ~= "table" then return end
+	if db.settings.reagentBagFreeSlots then db.settings.freeSlots = "reagent" end
+	db.settings.reagentBagFreeSlots = nil
+end
 
 local function FillDefaults(target, defaults)
 	for key, value in pairs(defaults) do

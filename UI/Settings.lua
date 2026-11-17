@@ -21,14 +21,24 @@ local OPTIONS = {
 		help = "Adds the estimated disenchant value (average over many disenchants, priced at AH prices) and "
 			.. "what the item can disenchant into to item tooltips. Not yet confirmed for Forever." },
 	{ divider = true },
-	-- Mirrors Blizzard's own "Show Free Bag Space" (Options > Interface): reads and writes the game setting
-	-- displayFreeBagSlots, which Blizzard's backpack button watches (CVAR_UPDATE). ProfitCraft stores nothing.
-	{ cvar = "displayFreeBagSlots", label = "Show free slots on the backpack",
-		help = "The same switch as Blizzard's \"Show Free Bag Space\" (Options > Interface): free slots in your "
-			.. "normal bags, shown on the backpack button. Changing it here changes Blizzard's option." },
-	{ key = "reagentBagFreeSlots", label = "Show free slots on the reagent bag",
-		help = "Shows the reagent bag's free slots on its bag bar button. For the normal bags, turn on Blizzard's "
-			.. "own \"Show Free Bag Space\" option (Options > Interface)." },
+	-- One choice for both counts: Blizzard's own (game setting displayFreeBagSlots, the switch behind Blizzard's
+	-- "Show Free Bag Space" in Options > Interface) and ProfitCraft's split (setting freeSlots, UI/BagSpace.lua).
+	{ key = "freeSlots", cvar = "displayFreeBagSlots", label = "Free bag slots",
+		help = "Free slot counts on the bag bar. Blizzard's count is one total that includes the reagent bag; "
+			.. "ProfitCraft's splits it as (reagent bag|normal bags), in the order the bags sit on the bar.",
+		choices = {
+			{ label = "Off", cvarOn = false, mode = "none", help = "No free slot counts." },
+			{ label = "Blizzard only", cvarOn = true, mode = "none",
+				help = "Blizzard's total on the backpack button (the same switch as Blizzard's \"Show Free Bag "
+					.. "Space\", Options > Interface)." },
+			{ label = "ProfitCraft + Blizzard", cvarOn = true, mode = "reagent",
+				help = "Blizzard's total on the backpack button, and ProfitCraft's (reagent|normal) split on the "
+					.. "reagent bag button." },
+			{ label = "ProfitCraft only", cvarOn = true, mode = "backpack",
+				help = "ProfitCraft's (reagent|normal) split on the backpack button, in place of Blizzard's total. "
+					.. "Blizzard's own option stays on underneath, so its count comes back if ProfitCraft is "
+					.. "disabled or removed." },
+		} },
 	{ divider = true },
 	{ key = "debug", label = "Debug mode: show errors in chat",
 		help = "Errors are always logged (/pcraft errors). With debug mode on they are also printed in chat as "
@@ -36,12 +46,12 @@ local OPTIONS = {
 }
 
 local ROW_SPACING = 30
-local SLIDER_ROWS = 2     -- a slider takes two rows: its label, then the slider
+local SLIDER_ROWS = 2     -- a slider or dropdown takes two rows: its label, then the control
 local DIVIDER_ROWS = 0.5  -- a divider line takes half a row
 
 local function RowsUsed(option)
 	if option.divider then return DIVIDER_ROWS end
-	return option.slider and SLIDER_ROWS or 1
+	return (option.slider or option.choices) and SLIDER_ROWS or 1
 end
 
 local function TotalRows()
@@ -72,10 +82,23 @@ local function SetValue(option, value)
 	end
 end
 
--- Makes the checkboxes and sliders reflect the saved settings (and Blizzard's, for mirrored ones).
+-- A dropdown choice is selected when ProfitCraft's setting matches and, where ProfitCraft draws nothing, when
+-- Blizzard's game setting matches too (that tells "Off" and "Blizzard only" apart).
+local function IsChoiceSelected(option, choice)
+	if PC.db.settings[option.key] ~= choice.mode then return false end
+	return choice.mode ~= "none" or C_CVar.GetCVarBool(option.cvar) == choice.cvarOn
+end
+
+local function SelectChoice(option, choice)
+	C_CVar.SetCVar(option.cvar, choice.cvarOn and "1" or "0")
+	PC:SetSetting(option.key, choice.mode)
+end
+
+-- Makes the checkboxes, sliders and dropdowns reflect the saved settings (and Blizzard's, for mirrored ones).
 local function Sync(page)
 	for option, box in pairs(page.checkboxes) do box:SetChecked(GetValue(option)) end
 	for option, slider in pairs(page.sliders) do slider:SetValue(PC.db.settings[option.key]) end
+	for _, dropdown in pairs(page.dropdowns) do dropdown:GenerateMenu() end
 end
 
 local function ShowHelp(owner, option)
@@ -106,6 +129,30 @@ local function BuildSlider(page, option, x, y)
 	return slider
 end
 
+-- A dropdown (Blizzard's WowStyle1DropdownTemplate, as in the side panel) with its label on the row above.
+local function BuildDropdown(page, option, x, y)
+	local label = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	label:SetPoint("TOPLEFT", x + 4, y - 6)
+	label:SetText(option.label)
+	local dropdown = CreateFrame("DropdownButton", nil, page, "WowStyle1DropdownTemplate")
+	dropdown:SetWidth(200)
+	dropdown:SetPoint("TOPLEFT", x + 8, y - ROW_SPACING + 2)
+	dropdown:SetupMenu(function(_, rootDescription)
+		for _, choice in ipairs(option.choices) do
+			local entry = rootDescription:CreateRadio(choice.label,
+				function() return IsChoiceSelected(option, choice) end,
+				function() PC:Call("settings " .. option.key, SelectChoice, option, choice) end)
+			entry:SetTooltip(function(tooltip)
+				GameTooltip_SetTitle(tooltip, choice.label)
+				GameTooltip_AddNormalLine(tooltip, choice.help)
+			end)
+		end
+	end)
+	dropdown:HookScript("OnEnter", function(self) ShowHelp(self, option) end)
+	dropdown:HookScript("OnLeave", function() GameTooltip:Hide() end)
+	return dropdown
+end
+
 local function BuildCheckbox(page, option, x, y)
 	local box = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
 	box:SetPoint("TOPLEFT", x, y)
@@ -119,9 +166,9 @@ local function BuildCheckbox(page, option, x, y)
 	return box
 end
 
--- Builds one settings page (checkboxes and sliders) inside `page`, starting at (x, y) from its top left.
+-- Builds one settings page (checkboxes, sliders and dropdowns) inside `page`, starting at (x, y) from its top left.
 local function BuildPage(page, x, y)
-	page.checkboxes, page.sliders = {}, {}
+	page.checkboxes, page.sliders, page.dropdowns = {}, {}, {}
 	local row = 0
 	for _, option in ipairs(OPTIONS) do
 		local rowY = y - row * ROW_SPACING
@@ -134,6 +181,8 @@ local function BuildPage(page, x, y)
 			line:SetPoint("TOPLEFT", x + 4, rowY - ROW_SPACING * DIVIDER_ROWS / 2)
 		elseif option.slider then
 			page.sliders[option] = BuildSlider(page, option, x, rowY)
+		elseif option.choices then
+			page.dropdowns[option] = BuildDropdown(page, option, x, rowY)
 		else
 			page.checkboxes[option] = BuildCheckbox(page, option, x, rowY)
 		end

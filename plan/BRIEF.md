@@ -16,6 +16,9 @@ Read this first, then `plan/FEATURES.md` and `plan/DESIGN.md`. Project-wide rule
 - **0.1-beta.1 published 2026-11-14** (briefly published as "0.1-beta.0a", then replaced by beta.1 at Sylice's request; a letter would be fine in the `.toc` version, which is plain text). Before it, the same code was published once more as a recreated beta.0 to test WowUp: no update offered, as predicted (see AGENTS.md). Contents:
 - Betas: fixes only; new features go to 0.2. **Next release (Sylice, 2026-11-14):** either `0.1-beta.2` (if fixes are needed) or, once beta.1 is tested enough, the final **`0.1`** as a normal GitHub release (pre-release flag off; tag `v0.1`, zip `ProfitCraft-v0.1-forever.zip`). Published as GitHub pre-releases like the alphas; the final 0.1 is the first normal release.
 
+- **0.1-rc.0 committed and pushed 2026-11-17, not yet released** (Sylice: "rc" = release candidate, after the betas). One fix: the free bag slots dropdown (FEATURES.md "Version 0.1-rc.0", DESIGN.md "Free bag slots"); 109 checks pass (103 + 4 without Auctionator + the settings upgrade, `/tmp/pcraft-test/upgrade.py`). Next: Sylice tests it in game, then publish rc.0 as a GitHub pre-release when Sylice says so, then the final `0.1`. After that: 0.2, which starts with a currency window (Sylice, 2026-11-17; design not yet written down).
+- **Settings database version 2** since rc.0 (`Data.lua` upgrades[2]: `reagentBagFreeSlots` -> `freeSlots`).
+
 ## How we work
 - Evidence for Forever API facts: Blizzard's Forever UI source (Gethe/wow-ui-source, branch `forever`; shallow clone ~54 MB into /tmp) and PsiLab results; reference addons are idea sources, not proof.
 - Tests: LuaJIT via `lupa` in a temp venv (`uv venv /tmp/luachk && uv pip install --python /tmp/luachk/bin/python lupa`) with stubbed WoW functions. The test harness lived in `/tmp/pcraft-test/` (`harness.lua`, `run.py`) and will be gone after a reboot; recreate it rather than skipping tests (it simulated login, opening a profession, prices from a fake Auctionator, all windows and settings; 64 checks at alpha.3).
@@ -25,7 +28,6 @@ Read this first, then `plan/FEATURES.md` and `plan/DESIGN.md`. Project-wide rule
 
 ## Other open items (not urgent)
 - `GetAuctionAgeByItemID` unit (whole days?): run PsiLab `/lab run` a day after a scan.
-- Whether Blizzard's free-bag-space number also counts the reagent bag.
 - Shorten the reagent-bag checkbox hover text (it still tells people to use Blizzard's Interface option, now duplicated by the checkbox above it): suggested, not yet approved.
 - Sylice mentioned "the shopping list works well" though ProfitCraft has none yet; never clarified (probably meant D/E Bags or Auctionator's list).
 - Milestone 0.2 (own AH scan, standalone) and 0.3 (filters, hover breakdown, vendor comparison, crafted reagents, shopping list) per `plan/FEATURES.md`.
