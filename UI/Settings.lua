@@ -195,6 +195,64 @@ local function BuildPage(page, x, y)
 	pages[#pages + 1] = page
 end
 
+-- "Create Profit Macro": a general (account-wide) macro "PCraft": left-click /pcraft, right-click the settings.
+-- /pcraft reads the [btn:2] condition itself (SecureCmdOptionParse, Core.lua). Blizzard's own macro window creates
+-- macros the same way (Forever source: Blizzard_MacroUI/Blizzard_MacroIconSelector.lua, CreateMacro); the icon is
+-- the money bag of Forever's bank window (Blizzard_UIPanels_Game/Camelot/BankFrame.xml).
+local MACRO_NAME = "PCraft"
+local MACRO_ICON = "Interface\\Icons\\Achievement_GuildPerk_MobileBanking"
+local MACRO_BODY = "/pcraft [btn:2] settings; [btn:1]"
+
+-- nil when the macro can be created, else why not.
+local function MacroBlocked()
+	local numAccount, numCharacter = GetNumMacros()
+	local maxAccount = Constants.MacroConsts.MAX_ACCOUNT_MACROS
+	for i = 1, numAccount do
+		if GetMacroInfo(i) == MACRO_NAME then return "Macro already exists" end
+	end
+	for i = maxAccount + 1, maxAccount + numCharacter do
+		if GetMacroInfo(i) == MACRO_NAME then return "Macro already exists" end
+	end
+	if numAccount >= maxAccount then return "No free general macro slot" end
+end
+
+local macroButton
+local function UpdateMacroButton()
+	if macroButton then macroButton:SetEnabled(MacroBlocked() == nil) end
+end
+
+local function CreateMacroButton(parent)
+	macroButton = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	macroButton:SetSize(140, 22)
+	macroButton:SetPoint("BOTTOMRIGHT", -6, 4)
+	macroButton:SetText("Create Profit Macro")
+	macroButton:SetMotionScriptsWhileDisabled(true)  -- the tooltip also shows while greyed out
+	macroButton:SetScript("OnClick", function()
+		PC:Call("create macro", function()
+			if MacroBlocked() then return end
+			CreateMacro(MACRO_NAME, GetFileIDFromPath(MACRO_ICON) or MACRO_ICON, MACRO_BODY, false)
+			PC:Print("macro \"" .. MACRO_NAME .. "\" created (Escape > Macros, General tab). Left-click: profit list; "
+				.. "right-click: settings.")
+			UpdateMacroButton()
+		end)
+	end)
+	macroButton:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		local blocked = MacroBlocked()
+		if blocked then
+			GameTooltip:AddLine(blocked, 1, 1, 1)
+		else
+			GameTooltip:AddLine("Create Profit Macro", 1, 1, 1)
+			GameTooltip:AddLine("Adds a general macro \"" .. MACRO_NAME .. "\" for your action bar: left-click opens "
+				.. "the profit list (/pcraft), right-click opens these settings.", nil, nil, nil, true)
+		end
+		GameTooltip:Show()
+	end)
+	macroButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	parent:HookScript("OnShow", UpdateMacroButton)
+	PC:RegisterEvent("UPDATE_MACROS", UpdateMacroButton)
+end
+
 local function CreateWindowPage()
 	window = PC:CreateWindow("ProfitCraftSettings", UIParent, 360, 96 + TotalRows() * ROW_SPACING, "ProfitCraft Settings",
 		{ movable = true })
@@ -203,8 +261,11 @@ local function CreateWindowPage()
 	BuildPage(page, 8, -6)
 
 	local version = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	version:SetPoint("BOTTOMRIGHT", -12, 8)
+	version:SetPoint("BOTTOMLEFT", 12, 8)
 	version:SetText("ProfitCraft " .. PC.version)
+
+	CreateMacroButton(window)
+	UpdateMacroButton()
 end
 
 -- The page in Blizzard's Options > AddOns. Blizzard sizes and shows the canvas frame itself.

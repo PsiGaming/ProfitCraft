@@ -155,6 +155,12 @@ SLASH_PROFITCRAFT1 = "/pcraft"
 SlashCmdList.PROFITCRAFT = function(msg)
 	PC:Call("slash command", function()
 		if not PC.db then return end
+		-- Macro conditions such as "/pcraft [btn:2] settings; [btn:1]" (the PCraft macro): the first matching
+		-- part is the command; nothing matching does nothing (as Blizzard's own /stopattack [...]).
+		if (msg or ""):find("[", 1, true) then
+			msg = SecureCmdOptionParse(msg)
+			if not msg then return end
+		end
 		local command, rest = strtrim(msg or ""):match("^(%S*)%s*(.-)$")
 		command = command:lower()
 		rest = rest:lower()
