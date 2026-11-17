@@ -5,7 +5,7 @@ Read this first, then `plan/FEATURES.md` and `plan/DESIGN.md`. Project-wide rule
 ## Where things stand
 - ProfitCraft is public at github.com/PsiGaming/ProfitCraft (MIT). Released as GitHub pre-releases: 0.1-alpha.0, alpha.1, alpha.2, alpha.3, alpha.4 (alpha.4 = own disenchant estimate). Sylice and friends install via WowUp. Zip name `ProfitCraft-v<version>-forever.zip`, built with `git archive --prefix=ProfitCraft/` (the `plan/` folder is excluded via `.gitattributes`).
 - Everything Sylice reported after testing alpha.0-alpha.2 is fixed; disenchant values are rebuilt for alpha.4 (below).
-- Version scheme: Sylice decides when a version number changes. Don't publish without Sylice's go-ahead.
+- Version scheme: Sylice decides when a version number changes. **Every commit of addon code is also published** (new `.toc` version, tag, zip, GitHub release): Sylice can only test through WowUp, which only sees releases (Sylice, 2026-11-17). Commits touching only `plan/` need no release.
 
 ## Current state: 0.1-alpha.5, published 2026-11-14 as a GitHub pre-release; all of it confirmed working in game by Sylice (2026-11-14)
 - alpha.4 (own disenchant estimate, `Disenchant.lua`, DESIGN.md section 12) is published and confirmed working in game by Sylice.
