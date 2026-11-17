@@ -216,6 +216,19 @@ local function MacroBlocked()
 	if numAccount >= maxAccount then return "No free general macro slot" end
 end
 
+-- Hovering the PCraft macro on an action bar adds what its clicks do. A macro has no tooltip of its own, so the
+-- lines are added after Blizzard builds the action button's tooltip (GameTooltip:SetAction, called when the mouse
+-- enters the button and on Blizzard's own 0.2 s tooltip refresh; Forever source: Blizzard_ActionBar/Shared/
+-- ActionButton.lua). No polling: nothing runs unless an action button's tooltip is being shown.
+hooksecurefunc(GameTooltip, "SetAction", function(tooltip, slot)
+	PC:Call("macro tooltip", function()
+		if C_ActionBar.GetActionText(slot) ~= MACRO_NAME then return end
+		tooltip:AddLine("Left-click: profit list", 0.7, 0.7, 0.7)
+		tooltip:AddLine("Right-click: ProfitCraft settings", 0.7, 0.7, 0.7)
+		tooltip:Show()
+	end)
+end)
+
 local macroButton
 local function UpdateMacroButton()
 	if macroButton then macroButton:SetEnabled(MacroBlocked() == nil) end
