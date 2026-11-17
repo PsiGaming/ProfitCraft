@@ -104,6 +104,12 @@ From 0.2 on there are no alphas: each beta adds features, rc = done, fixes only 
 
 Built as designed below, plus: up to 10 watched items; new items start with max 0 (never bought until a max is set); a scan keeps going while the popup shows, and when the deal is gone it flashes "Opportunity gone" and closes (Sylice); after a purchase it flashes "Bought N for X". "Stackable" is judged by the item's stack size, since `C_AuctionHouse.GetItemCommodityStatus` needs a bag slot (Forever docs).
 
+Changes after Sylice's first test (2026-11-17, released as 0.2-beta.4):
+- **Bug: a purchase could hang** (Buy greyed out, popup stuck, scanning paused): no quote ever arrived and there was no time limit. Now: the purchase call matches Blizzard's (`StartCommoditiesPurchase(itemID, quantity, unitPrice)`, Blizzard_AuctionHouseFrame.lua); while the popup shows only the offered item is searched (every second), so the AH's current search is that item, as when buying through Blizzard's window; no quote within 5 s or no result within 10 s cancels and says so; a Blizzard block (`ADDON_ACTION_BLOCKED`/`FORBIDDEN`) is reported in chat; `/pcraft debug on` prints every purchase step. Cause still unknown until the next test.
+- **Interval slider** 1 s, 3 s, 5 s, 10 s, 30 s, 1 m, 5 m (default 5 s), takes effect at once; each item is checked at most every N seconds for N active items (Sylice), so at most one search a second.
+- **History panel** right of the Sniper panel, for the item clicked in the list: bar chart of the cheapest price per check over the last 15 minutes with the max price as a yellow line; now, average, lowest dip (and when), highest, trend. In memory only (a session).
+- **Layout:** smaller rows; Start/Stop small, on the bottom line with the status. **Popup** opens over the Sniper panel; it can be dragged and remembers its position.
+
 
 - [ ] **Watch list:** items with a **max price** each (e.g. Silk Cloth, 1s 20c) and one **minimum balance** for the account (e.g. never spend below 25s). While the AH window is open, ProfitCraft searches the watched items every few seconds (`C_AuctionHouse.SendSearchQuery`; Blizzard's limit is 100 searches a minute, Forever API docs).
 - [ ] **Buy window:** when listings at or under the max appear, a window pops up with what you'd get ("Silk Cloth: 240 at <= 1s 20c, 2g 88s") and a big **Buy** button, plus a **sound** (setting).
