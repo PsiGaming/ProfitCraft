@@ -13,7 +13,8 @@ local DEFAULT_SETTINGS = {
 	tooltipDisenchant = false, -- disenchant estimate line in item tooltips (off by default, as in Auctionator)
 	freeSlots = "none",   -- ProfitCraft's free bag slot count: "none", "reagent" or "backpack" (UI/BagSpace.lua)
 	staleDays = 2,        -- side panel warns when AH prices are this many days old; 0 = off
-	moneyWindow = false,  -- money window shown (UI/MoneyWindow.lua)
+	moneyWindow = false,  -- currencies bar shown (UI/MoneyWindow.lua)
+	crumbPercent = 1,     -- stackable items: price levels under this % of all units listed are ignored (Prices.lua)
 }
 
 -- upgrades[n] turns a version n-1 database into version n.
@@ -51,6 +52,10 @@ PC:RegisterEvent("ADDON_LOADED", function(name)
 	money.bg = type(money.bg) == "table" and money.bg or { r = 0, g = 0, b = 0, a = 0.5 }
 	money.locked = money.locked == true
 	db.money = money
+	-- AH scan data (Scan.lua, DESIGN.md section 9): the latest detailed scan per ruleset key, the reagents and
+	-- products of every recipe seen on the account, and the time of ProfitCraft's own last full scan.
+	db.snapshot = type(db.snapshot) == "table" and db.snapshot or {}
+	db.recipeItems = type(db.recipeItems) == "table" and db.recipeItems or {}
 	ProfitCraftDB = db
 	PC.db = db
 	PC:Send("DATA_READY")

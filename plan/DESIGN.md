@@ -48,7 +48,8 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 | `UI/Tooltip.lua` | Window | Disenchant line in item tooltips |
 | `UI/RecipeTooltip.lua` | Window | Cost and profit lines on trainer tooltips (Spell tooltip data, id = recipe ID) and recipe item tooltips (the ItemSpellTriggerLearn line's spellID = recipe ID); uses `Recipes:Load` and `Profit:Evaluate`. BoP products: no sale lines |
 | `UI/Bags.lua` | Window | "D/E Bags": disenchantable items in the bags with disenchant / AH / merchant values |
-| `UI/MoneyWindow.lua` | Window | Money window: money and up to 5 tracked currencies, right-click menu (0.2) |
+| `Scan.lua` | Data | AH scan data (0.2, section 9): follows Auctionator's scans or runs its own full scan (button on the AH window), keeps the snapshot of recipe items |
+| `UI/MoneyWindow.lua` | Window | Currencies bar (code name: money window): money and up to 5 tracked currencies, right-click menu (0.2) |
 | `UI/BagSpace.lua` | Window | Free bag slots split as (reagent\|normal) on the reagent bag or backpack button |
 | `UI/Settings.lua` | Window | The settings page, shown in our own window and in Blizzard's Options > AddOns |
 | `Sources/Scan.lua`, `Sources/Merchant.lua` | Source | Milestone 2 (not built): our own AH scan and merchant buy-price recording |
@@ -109,9 +110,11 @@ ProfitCraftDB = {
   money    = { x = 900, y = 500, locked = false, bg = { r = 0, g = 0, b = 0, a = 0.5 }, currencies = { 101, 102 } },
                         -- money window (0.2): top-right corner, lock, background, tracked currency IDs; one list for all characters
   errors   = { ... },   -- error log: the last 50 caught errors (message, where, time, ProfitCraft version), newest first; repeats of the same error only increase a count
-  rulesets = {          -- milestone 2: our own AH data, per ruleset (see below)
+  snapshot = {          -- 0.2: the latest detailed scan, per ruleset key, overwritten by each scan (section 9)
     ["<ruleset key>"] = {
-      prices = { [itemID] = { price = 1234, qty = 20, time = 1763030400 } },
+      time   = 1763030400,
+      levels = { [itemID] = { { 120, 400 }, { 125, 80 } } },  -- recipe items only: {price per unit, quantity}, cheapest first, capped
+      onSale = { ... },                                         -- the scan's on-sale hits
     },
   },
   vendor = { [itemID] = 125 },   -- milestone 2: our own merchant buy prices (copper per item)
@@ -122,7 +125,7 @@ ProfitCraftDB = {
 - The settings checkbox for Blizzard's own free-bag-space option stores nothing here: it reads and writes Blizzard's game setting `displayFreeBagSlots` (section 7).
 - Forever has no classic realms: it has 4 rulesets, each a "megaserver" with its own data: Normal, PvP, Roleplay and Roleplay-PvP; all players of a ruleset share one AH (Sylice, 2026-11-13). Prices are kept per ruleset **and faction** (cross-faction AH assumed not shared until confirmed).
 - **Ruleset key** (milestone 2) = `GetRealmName()` with the instance number ("Realm 7") removed, plus the faction: "CAMWOW US2 Realm 7 PvE" + Alliance → `CAMWOW US2 PvE|Alliance`. Removing only "Realm <number>" merges characters on different instances of the same ruleset, while keeping the rest of the name means Roleplay and Roleplay-PvP (names unknown; Sylice's guess: "Roleplay" or "RP") can't collide with Normal or PvP. The raw realm name is stored with the data, so the key can be corrected later.
-- Size limit (milestone 2): prices not updated for a set number of days and not used by any recipe ProfitCraft has seen are removed at login.
+- Size: the snapshot holds only recipe items and is replaced by every scan, so it doesn't grow; no history is kept (Auctionator's is used, section 9). Earlier plan (dropped 2026-11-17): own prices with a pruning rule.
 - Recipe data is not saved: it is read live when the profession window opens.
 
 ## 7. Windows
@@ -171,6 +174,7 @@ All windows use Blizzard's current templates (all present in the Forever source)
   - The same page under Blizzard's Options > AddOns > ProfitCraft (`Settings.RegisterCanvasLayoutCategory` + `Settings.RegisterAddOnCategory`, Forever source). Closing that returns to the game menu, which is where the user came from.
 - Each page re-reads the values when shown and after any change (`SETTINGS_CHANGED`, and `CVAR_UPDATE` for the mirrored game setting), so the two never disagree.
 - **Create Profit Macro** button (0.2-beta.0), bottom right of ProfitCraft's own settings window only (the version number moved to the bottom left): `CreateMacro("PCraft", icon, "/pcraft [btn:2] settings; [btn:1]", false)` (general macro; Forever's own macro window uses `CreateMacro`, `Blizzard_MacroUI`). Icon: `Interface\Icons\Achievement_GuildPerk_MobileBanking` (a money bag; used by Forever's bank window, `Blizzard_UIPanels_Game/Camelot/BankFrame.xml`), passed as a file ID via `GetFileIDFromPath`. Disabled (tooltip still shown, `SetMotionScriptsWhileDisabled`) when a general or character macro named PCraft exists or all general slots are used; rechecked when the window opens and on `UPDATE_MACROS`. Since beta.1, hovering the PCraft macro on an action bar adds two lines (left-click / right-click) to its tooltip: a `hooksecurefunc` on `GameTooltip:SetAction`, which Blizzard's action buttons call on mouse-over and on their own 0.2 s tooltip refresh (`Blizzard_ActionBar/Shared/ActionButton.lua`, `TOOLTIP_UPDATE_TIME`), identified by `C_ActionBar.GetActionText(slot) == "PCraft"`; no polling. Action bar addons that build tooltips without `SetAction` don't get the lines. `/pcraft` evaluates macro conditions itself with `SecureCmdOptionParse` when its text contains "[" (nothing matching = nothing happens, like Blizzard's `/stopattack`).
+- 0.2-beta.1: a "PRICES" heading (option type `title`) over the price-age slider, the new crumb slider (`crumbPercent`: 0.5/1/2/3%, default 1; a slider option may step through a `values` list) and the disenchant tooltip line; "Money window" shown as "Currencies bar".
 - Options (beta.0), in three sections separated by divider lines: (1) price warning age slider and disenchant tooltip line, (2) free bag slots (a dropdown since rc.0), (3) money window (0.2), (4) debug mode. Details: disenchant line in item tooltips (off by default from alpha.4; existing installs keep their saved choice); price warning age (slider Off/1/2/3/4 days, default 2; Blizzard's `MinimalSliderWithSteppersTemplate`); free bag slots (dropdown: Off / Blizzard only / ProfitCraft + Blizzard / ProfitCraft only, default Off; writes Blizzard's `displayFreeBagSlots` with `C_CVar` and ProfitCraft's `freeSlots`, see "Free bag slots" above); debug mode (off).
 
 ## 8. Slash command
@@ -188,13 +192,35 @@ All windows use Blizzard's current templates (all present in the Forever source)
 | `/pcraft errors` | List logged errors; `/pcraft errors clear` empties the log |
 | anything else | Version and the command list |
 
-## 9. Own AH scan (milestone 2, outline only)
+## 9. AH scan data (0.2; decided 2026-11-17, replaces the earlier "own scan with own history" outline)
 
-Decided in detail when milestone 2 starts. Direction:
-- Searches only the items ProfitCraft needs (outputs and reagents of known recipes), not the whole AH.
-- Started by the user with a button at the AH, never automatically; can be stopped; respects the AH's request limits (`AUCTION_HOUSE_THROTTLED_SYSTEM_READY`, Forever source).
-- Records the lowest price, quantity listed and time per item (and the listing detail needed for a "cheapest 20%" average, if that feature is kept).
-- Forever has both per-item searches (`C_AuctionHouse.SendSearchQuery` with commodity/item search results) and a full download (`C_AuctionHouse.ReplicateItems`) (Forever source); which suits best is tested then.
+**Principle:** Auctionator keeps the history; ProfitCraft keeps only a small, current snapshot. With Auctionator, ProfitCraft never scans itself: it reads along with Auctionator's scan.
+
+**Full scans on Forever.** `C_AuctionHouse.ReplicateItems()` downloads every auction ("should be used in place of an 'allItem' query to query the entire auction house"; browse searches are limited to 100 calls a minute and "should not be used to query the entire auction house", Forever API docs `AuctionHouseDocumentation.lua`). When the data is ready the game fires `REPLICATE_ITEM_LIST_UPDATE` to every addon listening, and any addon can read the listings with `C_AuctionHouse.GetNumReplicateItems()` / `GetReplicateItemInfo(index)`: name, texture, count, quality, level, minBid, buyoutPrice, owner, ownerFullName, itemID, hasAllInfo (Forever docs). Entries with `hasAllInfo = false` need their item data loaded first (Auctionator waits for it, `Source_ModernAH/FullScan/Mixins/Frame.lua`). **Works on Forever:** Auctionator's replicate mode finished with "Finished processing 6552 items" (Sylice, in game, 2026-11-17; knowledge file).
+
+**With Auctionator** (installed and enabled, `C_AddOns.IsAddOnLoaded`):
+- No ProfitCraft scan button.
+- Auctionator has one scan routine per mode (Auctionator 346): `AuctionatorFullScanFrameMixin:InitiateScan` (replicate mode, option `replicate_scan_3`, label "Use alternate slower scan mode by default" in Advanced) and `AuctionatorIncrementalScanFrameMixin:InitiateScan` (summary mode, the default: one empty `SendBrowseQuery`, lowest price and quantity per item only). ProfitCraft hooks both (`hooksecurefunc` on the mixins; the frames are created from them when the AH opens). Internal Auctionator code: each hook checks the mixin exists and runs in `PC:Call`, so a renamed function only disables the message.
+  - Replicate scan started -> ProfitCraft listens for `REPLICATE_ITEM_LIST_UPDATE`, reads the listings (its own pass over `GetReplicateItemInfo`; Auctionator reads them too, independently), prints "reading Auctionator's full scan..." and a short result ("done: N items on sale").
+  - Summary scan started -> chat notice: summary scan detected; for exact reagent costs and on-sale detection switch Auctionator to its detailed scan: Auctionator settings > Advanced > "Use alternate slower scan mode by default". Prices keep coming from Auctionator's public API as in 0.1.
+- Auctionator only listens to its own scans (it registers `REPLICATE_ITEM_LIST_UPDATE` in `RegisterForEvents` when it starts one), so a scan started by ProfitCraft would not update Auctionator. That is why ProfitCraft has no button when Auctionator is present.
+
+**Without Auctionator:** a **Scan** button at the AH starts `ReplicateItems()` (full scans only; at most one per 15 minutes, the limit Auctionator also uses, `FullScan/Mixins/Frame.lua` `CanInitiate`; the button shows the wait). No history, so no On Sale; prices and profit work from the snapshot.
+
+**Reading a scan** (both cases): one pass over all listings, in batches across frames so the game doesn't stall (thousands of listings; Auctionator also batches).
+- Per listing: price per unit = buyout / count; listings without a buyout (bid only) are skipped; **own listings are skipped** (owner = the player; when the owner isn't loaded yet the listing counts as someone else's).
+- **Saved** (`ProfitCraftDB.snapshot[rulesetKey]`, overwritten by every scan): scan time; for the reagents and products of all recipes ProfitCraft has seen on the account, the cheapest price levels as {price per unit, quantity}, capped per item (CraftProfit's cap is 20 levels); the on-sale hits.
+- **Not saved:** everything else. Each listing is checked once against the item's usual price (On Sale) and then dropped.
+- Scale (Sylice's data, 2026-11-17): a full scan covers about 6,500 different items (Auctionator: 7,073 items, 1 MB); recipe items only, CraftProfit: 87 items' ladders, 18.5 KB.
+
+**History** (with Auctionator only): `Auctionator.Database:GetPriceHistory(dbKey)` (per day: lowest price, highest of the daily lows, quantity) and `GetMeanPrice(dbKey, days)` (Auctionator 346, `Source/Database/Mixin.lua:155`, `205`), internal, so wrapped like the hooks. 21 days by default (Auctionator option). Used for 3-/7-day averages, trend and the On Sale "usual price". Random-suffix items: Auctionator's database key must separate suffixes for this to be fair; check how it keys Forever items before relying on it.
+
+**Prices from the snapshot** (both rules fall back to Auctionator's lowest price, or none, when there's no detailed scan):
+- Reagent cost: needed quantity = recipe amount x crafts in the current mode (1, or enough for a full stack of the product); take price levels cheapest first until the quantity is covered; too few listed -> flagged "only N listed". Vendor price still wins when cheaper. Single units are counted: reagents can be bought by quantity (Sylice, 2026-11-17).
+- Stackable items (`itemStackCount` > 1): price levels with less than the crumb limit of all units listed (setting, 0.5/1/2/3%, default 1%) are ignored, for reagent cost and sale price. Sale price = cheapest remaining level.
+- Non-stackable items: sale price = the cheapest listing unless it is below the item's usual price by more than the BoE discount (Auctionator's 7-day mean, `GetMeanPrice(dbKey, 7)`); then the next listing.
+- On Sale thresholds (sliders, own settings area): BoE discount 50-90% (5% steps, default 65%), reagent discount 40-75% (default 40%); reagents also must clear the crumb limit.
+- "Most recent per item" (FEATURES.md) still decides between Auctionator's price and the snapshot.
 
 ## 10. Checks before or during building (in game)
 

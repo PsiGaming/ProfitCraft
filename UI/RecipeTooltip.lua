@@ -20,7 +20,7 @@ local function AddRecipeLines(tooltip, recipeID)
 	tooltip:AddDoubleLine("Reagent cost", PC:FormatMoney(result.cost), 1, 1, 1)
 	for _, reagent in ipairs(result.reagents) do
 		tooltip:AddDoubleLine("  " .. reagent.quantity .. " x " .. PC.Items:GetName(reagent.itemID),
-			PC.Prices:FormatReagent(reagent.total, reagent.how), 0.8, 0.8, 0.8)
+			PC.Prices:FormatReagent(reagent.total, reagent.how, reagent.listed), 0.8, 0.8, 0.8)
 	end
 	if result.bound then
 		tooltip:AddDoubleLine("Sale", "|cff888888bind on pickup: can't be sold|r", 1, 1, 1)

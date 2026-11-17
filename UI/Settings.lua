@@ -11,12 +11,21 @@
 
 local _, PC = ...
 
--- In display order; { divider = true } draws a line between sections.
+local CRUMB_VALUES = { 0.5, 1, 2, 3 }  -- % of all units listed
+
+-- In display order; { divider = true } draws a line between sections, { title = "..." } a section heading.
+-- A slider with `values` steps through that list; without, through whole numbers from min to max.
 local OPTIONS = {
+	{ title = "PRICES" },
 	{ key = "staleDays", slider = { min = 0, max = 4 }, label = "Warn when AH prices are older than",
 		help = "The side panel shows a banner asking you to scan the Auction House with Auctionator once prices "
 			.. "are this old. Off hides that warning (the \"Auctionator is required\" and \"No AH prices yet\" "
 			.. "warnings still show)." },
+	{ key = "crumbPercent", slider = { values = CRUMB_VALUES, format = function(v) return v .. "% of units listed" end },
+		label = "Ignore cheap amounts below (stackable items)",
+		help = "Price levels holding less than this share of all units listed are ignored for reagent costs and sale "
+			.. "prices: on a busy Auction House they're gone before you can buy them. Uses ProfitCraft's scan data "
+			.. "(Auctionator's detailed scan, or ProfitCraft's own full scan)." },
 	{ key = "tooltipDisenchant", label = "Disenchant estimate in item tooltips",
 		help = "Adds the estimated disenchant value (average over many disenchants, priced at AH prices) and "
 			.. "what the item can disenchant into to item tooltips. Not yet confirmed for Forever." },
@@ -40,8 +49,8 @@ local OPTIONS = {
 					.. "disabled or removed." },
 		} },
 	{ divider = true },
-	{ key = "moneyWindow", label = "Money window",
-		help = "A small movable window with your money and up to 5 currencies of your choice. Right-click it to add "
+	{ key = "moneyWindow", label = "Currencies bar",
+		help = "A small movable bar with your money and up to 5 currencies of your choice. Right-click it to add "
 			.. "or remove currencies, lock its position, change its background or hide it. Also: /pcraft money." },
 	{ divider = true },
 	{ key = "debug", label = "Debug mode: show errors in chat",
@@ -52,9 +61,11 @@ local OPTIONS = {
 local ROW_SPACING = 30
 local SLIDER_ROWS = 2     -- a slider or dropdown takes two rows: its label, then the control
 local DIVIDER_ROWS = 0.5  -- a divider line takes half a row
+local TITLE_ROWS = 0.8    -- a section heading
 
 local function RowsUsed(option)
 	if option.divider then return DIVIDER_ROWS end
+	if option.title then return TITLE_ROWS end
 	return (option.slider or option.choices) and SLIDER_ROWS or 1
 end
 
@@ -68,6 +79,17 @@ local function DaysText(value)
 	value = math.floor(value + 0.5)
 	if value == 0 then return "Off" end
 	return value == 1 and "1 day" or (value .. " days")
+end
+
+-- Where a slider's knob sits for the saved value: the value itself, or its place in the `values` list.
+local function SliderPosition(option)
+	local value = PC.db.settings[option.key]
+	local values = option.slider.values
+	if not values then return value end
+	for position, v in ipairs(values) do
+		if v == value then return position end
+	end
+	return 1
 end
 
 local pages = {}  -- every page built, for syncing
@@ -101,7 +123,7 @@ end
 -- Makes the checkboxes, sliders and dropdowns reflect the saved settings (and Blizzard's, for mirrored ones).
 local function Sync(page)
 	for option, box in pairs(page.checkboxes) do box:SetChecked(GetValue(option)) end
-	for option, slider in pairs(page.sliders) do slider:SetValue(PC.db.settings[option.key]) end
+	for option, slider in pairs(page.sliders) do slider:SetValue(SliderPosition(option)) end
 	for _, dropdown in pairs(page.dropdowns) do dropdown:GenerateMenu() end
 end
 
@@ -123,10 +145,17 @@ local function BuildSlider(page, option, x, y)
 	slider:SetWidth(220)
 	slider:SetPoint("TOPLEFT", x + 8, y - ROW_SPACING + 4)
 	local range = option.slider
-	slider:Init(PC.db.settings[option.key], range.min, range.max, range.max - range.min,
-		{ [MinimalSliderWithSteppersMixin.Label.Right] = DaysText })
-	slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, value)
-		PC:Call("settings " .. option.key, PC.SetSetting, PC, option.key, math.floor(value + 0.5))
+	local min, max = range.min, range.max
+	local format = DaysText
+	if range.values then
+		min, max = 1, #range.values
+		format = function(position) return range.format(range.values[math.floor(position + 0.5)]) end
+	end
+	slider:Init(SliderPosition(option), min, max, max - min, { [MinimalSliderWithSteppersMixin.Label.Right] = format })
+	slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, position)
+		position = math.floor(position + 0.5)
+		local value = range.values and range.values[position] or position
+		PC:Call("settings " .. option.key, PC.SetSetting, PC, option.key, value)
 	end, page)
 	slider.Slider:HookScript("OnEnter", function(self) ShowHelp(self, option) end)
 	slider.Slider:HookScript("OnLeave", function() GameTooltip:Hide() end)
@@ -177,7 +206,11 @@ local function BuildPage(page, x, y)
 	for _, option in ipairs(OPTIONS) do
 		local rowY = y - row * ROW_SPACING
 		row = row + RowsUsed(option)
-		if option.divider then
+		if option.title then
+			local heading = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			heading:SetPoint("TOPLEFT", x + 4, rowY - 4)
+			heading:SetText(option.title)
+		elseif option.divider then
 			local line = page:CreateTexture(nil, "ARTWORK")
 			line:SetColorTexture(1, 1, 1, 0.15)
 			line:SetHeight(1)

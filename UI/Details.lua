@@ -95,7 +95,7 @@ function Details:Update()
 	end
 	for _, reagent in ipairs(result.reagents) do
 		local label = reagent.quantity .. " x " .. PC.Items:GetName(reagent.itemID)
-		local value = reagent.total and PC.Prices:FormatReagent(reagent.total, reagent.how) or "|cffff8888no price|r"
+		local value = reagent.total and PC.Prices:FormatReagent(reagent.total, reagent.how, reagent.listed) or "|cffff8888no price|r"
 		rows[#rows + 1] = { label, value }
 	end
 	if not result.salePrice and not result.bound and result.recipe.outputItemID then

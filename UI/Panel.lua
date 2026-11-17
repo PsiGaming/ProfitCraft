@@ -123,21 +123,42 @@ local function NewestPriceAge(list)
 	return newest
 end
 
-local function OldPricesText(days)
-	return string.format("AH prices are %d %s old. Scan the Auction House with Auctionator to update them.", days,
-		days == 1 and "day" or "days")
+-- "12 min ago", "3 h ago", "2 days ago".
+local function ScanAge(t)
+	local minutes = math.floor((time() - t) / 60)
+	if minutes < 60 then return minutes .. " min ago" end
+	if minutes < 48 * 60 then return math.floor(minutes / 60) .. " h ago" end
+	return math.floor(minutes / 1440) .. " days ago"
 end
 
--- The banner's text: Auctionator missing, no AH prices, or prices older than the staleDays setting (0 = that
--- warning off); nil when all is well.
+local function ScanWith()
+	return PC.Auctionator:IsAvailable() and "with Auctionator" or "with ProfitCraft's Full scan button"
+end
+
+local function OldPricesText(days)
+	return string.format("AH prices are %d %s old. Scan the Auction House %s to update them.", days,
+		days == 1 and "day" or "days", ScanWith())
+end
+
+-- Time of the newest scan seen: Auctionator's (recorded by ProfitCraft) or ProfitCraft's snapshot; or nil.
+local function LastScanTime()
+	local auctionator = PC.Auctionator:GetLastScanTime()
+	local snapshot = PC.Scan:GetSnapshot()
+	local own = snapshot and snapshot.time
+	if auctionator and own then return math.max(auctionator, own) end
+	return auctionator or own
+end
+
+-- The banner's text: no AH prices yet, or prices older than the staleDays setting (0 = that warning off); nil when
+-- all is well. Without Auctionator, prices come only from ProfitCraft's own full scans.
 local function PriceWarning(list)
-	if not PC.Auctionator:IsAvailable() then
-		return "Auctionator is required: ProfitCraft gets all its prices from it. Install Auctionator, then scan "
-			.. "the Auction House."
+	if not PC.Auctionator:IsAvailable() and not PC.Scan:GetSnapshot() then
+		return "No AH prices yet. Without Auctionator, scan the Auction House with ProfitCraft's Full scan button "
+			.. "(on the AH window)."
 	end
 	if #list == 0 then return nil end
 	local staleDays = PC.db.settings.staleDays
-	local lastScan = PC.Auctionator:GetLastScanTime()
+	local lastScan = LastScanTime()
 	if lastScan then
 		local hours = (time() - lastScan) / 3600
 		if staleDays == 0 or hours < staleDays * 24 then return nil end
@@ -145,7 +166,7 @@ local function PriceWarning(list)
 	end
 	-- No scan seen by ProfitCraft yet (e.g. just updated): fall back to Auctionator's price age in days.
 	local age = NewestPriceAge(list)
-	if not age then return "No AH prices yet. Scan the Auction House with Auctionator." end
+	if not age then return "No AH prices yet. Scan the Auction House " .. ScanWith() .. "." end
 	if staleDays == 0 or age < staleDays then return nil end
 	return OldPricesText(age)
 end
@@ -164,8 +185,8 @@ function Panel:Refresh()
 	local list = PC.Profit:GetRanked(mode)
 	UpdateBanner(PriceWarning(list))
 	scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
-	if not PC.Auctionator:IsAvailable() then
-		statusText:SetText("|cffff8888Auctionator not found: no prices.|r")
+	if not PC.Auctionator:IsAvailable() and not PC.Scan:GetSnapshot() then
+		statusText:SetText("|cffff8888No AH prices yet: use the Full scan button at the AH.|r")
 	elseif #list == 0 then
 		statusText:SetText("Reading recipes...")
 	else
@@ -174,7 +195,10 @@ function Panel:Refresh()
 		for _, result in ipairs(list) do
 			if result[field] then priced = priced + 1 end
 		end
-		statusText:SetText(string.format("%s: %d recipes, %d priced", PC.Recipes.professionName or "?", #list, priced))
+		local text = string.format("%s: %d recipes, %d priced", PC.Recipes.professionName or "?", #list, priced)
+		local snapshot = PC.Scan:GetSnapshot()
+		if snapshot then text = text .. ", scan " .. ScanAge(snapshot.time) end
+		statusText:SetText(text)
 	end
 end
 

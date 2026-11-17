@@ -1,4 +1,4 @@
--- ProfitCraft: money window
+-- ProfitCraft: currencies bar (called "money window" in the code and the setting key moneyWindow)
 -- A small one-row window: your money on the right and up to MAX_CURRENCIES tracked currencies to its left. The
 -- window is anchored by its right edge, so it grows leftwards as currencies are added. Off by default (setting
 -- moneyWindow; settings window or /pcraft money). Right-click anywhere on it: add or remove a currency, lock or
@@ -134,7 +134,7 @@ end
 local function OpenMenu()
 	MenuUtil.CreateContextMenu(frame, function(_, root)
 		local data = Data()
-		root:CreateTitle("ProfitCraft money")
+		root:CreateTitle("Currencies bar")
 
 		local full = #data.currencies >= MAX_CURRENCIES
 		local add = root:CreateButton(full and ("Add currency (limit of " .. MAX_CURRENCIES .. ")") or "Add currency")

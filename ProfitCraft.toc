@@ -11,6 +11,7 @@ Data.lua
 Sources/Auctionator.lua
 Sources/ItemData.lua
 Prices.lua
+Scan.lua
 Disenchant.lua
 Recipes.lua
 Profit.lua

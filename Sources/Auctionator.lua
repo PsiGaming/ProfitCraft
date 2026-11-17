@@ -55,8 +55,8 @@ end
 PC:RegisterEvent("PLAYER_LOGIN", function()
 	local api = API()
 	if not api then
-		PC:Print("Auctionator not found. Version " .. PC.version .. " gets all its prices from Auctionator, "
-			.. "so profits can't be calculated without it.")
+		PC:Print("Auctionator not found. Use ProfitCraft's Full scan button at the Auction House for prices; "
+			.. "Auctionator adds price history.")
 		return
 	end
 	if type(api.RegisterForDBUpdate) == "function" then

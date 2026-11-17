@@ -16,27 +16,44 @@ local ranked = {}     -- mode -> sorted list of results
 --   recipe, complete (all prices known), missing (item IDs without a price),
 --   bound (the product binds on pickup: never sold, so no sale profit; craft-and-disenchant still counts),
 --   quantity (items per craft; the average for a random range), salePrice (AH price per item),
---   cost (reagent cost per craft), reagents ({ itemID, quantity, unit, total, how }),
+--   cost (reagent cost per craft), reagents ({ itemID, quantity, unit, total, how, listed }; listed = units on the AH
+--   when fewer than needed),
 --   profitCraft, profitItem, stackSize, profitStack (nil when not computable),
 --   disenchantValue (ProfitCraft's disenchant estimate per item), profitDisenchant (craft, then disenchant and sell the
 --   materials: estimate x quantity x (1 - AH cut) - cost; nil when not disenchantable or not computable)
+-- Profit for one full stack of the product: the reagents for enough crafts to make a stack are priced together,
+-- because buying more can cost more per unit (Prices:GetReagentCost). Per item made, times the stack size.
+local function StackProfit(result, cut)
+	if not result.stackSize then return nil end
+	local crafts = math.ceil(result.stackSize / result.quantity)
+	local made = crafts * result.quantity
+	local cost = 0
+	for _, line in ipairs(result.reagents) do
+		local total = PC.Prices:GetReagentCost(line.itemID, line.quantity * crafts)
+		if not total then return nil end
+		cost = cost + total
+	end
+	return (result.salePrice * made * (1 - cut) - cost) * result.stackSize / made
+end
+
 local function Evaluate(recipe, cut)
 	local result = { recipe = recipe, missing = {}, reagents = {} }
 	result.quantity = (recipe.quantityMin + recipe.quantityMax) / 2
 
 	local cost, complete = 0, true
 	for _, reagent in ipairs(recipe.reagents) do
-		local bestItem, bestUnit, bestHow
+		local bestItem, bestTotal, bestHow, bestListed
 		for _, itemID in ipairs(reagent.items) do
-			local unit, how = PC.Prices:GetReagentCost(itemID)
-			if unit and (not bestUnit or unit < bestUnit) then
-				bestItem, bestUnit, bestHow = itemID, unit, how
+			local total, how, listed = PC.Prices:GetReagentCost(itemID, reagent.quantity)
+			if total and (not bestTotal or total < bestTotal) then
+				bestItem, bestTotal, bestHow, bestListed = itemID, total, how, listed
 			end
 		end
 		local itemID = bestItem or reagent.items[1]
-		local line = { itemID = itemID, quantity = reagent.quantity, unit = bestUnit, how = bestHow }
-		if bestUnit then
-			line.total = bestUnit * reagent.quantity
+		local line = { itemID = itemID, quantity = reagent.quantity, how = bestHow, listed = bestListed }
+		if bestTotal then
+			line.total = bestTotal
+			line.unit = bestTotal / reagent.quantity
 			cost = cost + line.total
 		else
 			complete = false
@@ -67,7 +84,7 @@ local function Evaluate(recipe, cut)
 	if complete then
 		result.profitCraft = result.salePrice * result.quantity * (1 - cut) - result.cost
 		result.profitItem = result.profitCraft / result.quantity
-		if result.stackSize then result.profitStack = result.profitItem * result.stackSize end
+		result.profitStack = StackProfit(result, cut)
 	end
 	if result.cost and result.disenchantValue then
 		result.profitDisenchant = result.disenchantValue * result.quantity * (1 - cut) - result.cost
