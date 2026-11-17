@@ -142,6 +142,22 @@ function Sniper:GetHistoryStats(itemID)
 		trend = trend, checks = #list }
 end
 
+-- The chart's bars: bar index (1 = oldest, HISTORY_BARS = now) -> the lowest price checked in that bar's time slot.
+-- Slots are fixed to the clock (every check stays in its slot for good); counting them back from "now" made checks
+-- slide between neighbouring bars, so bars jumped up and back (Sylice, 2026-11-17). Only the newest bar changes.
+function Sniper:GetHistoryBars(itemID)
+	local slotLength = HISTORY_SECONDS / HISTORY_BARS
+	local current = math.floor(GetTime() / slotLength)
+	local bars = {}
+	for _, point in ipairs(history[itemID] or {}) do
+		local index = HISTORY_BARS - (current - math.floor(point[1] / slotLength))
+		if index >= 1 and index <= HISTORY_BARS and (not bars[index] or point[2] < bars[index]) then
+			bars[index] = point[2]
+		end
+	end
+	return bars
+end
+
 ---------------------------------------------------------------------------
 -- Popup
 ---------------------------------------------------------------------------
@@ -601,15 +617,7 @@ function UpdateHistoryPanel()
 		historyPanel.stats:SetText("No checks yet. Start sniping to collect prices.")
 		return
 	end
-	-- One bar per time slot: the lowest price seen in it.
-	local now, slot = GetTime(), HISTORY_SECONDS / HISTORY_BARS
-	local slots = {}
-	for _, point in ipairs(history[itemID]) do
-		local index = HISTORY_BARS - math.floor((now - point[1]) / slot)
-		if index >= 1 and index <= HISTORY_BARS and (not slots[index] or point[2] < slots[index]) then
-			slots[index] = point[2]
-		end
-	end
+	local slots = Sniper:GetHistoryBars(itemID)
 	local max = Entry(itemID) and Entry(itemID).max or 0
 	local low, high = stats.low, math.max(stats.high, max)
 	if max > 0 then low = math.min(low, max) end

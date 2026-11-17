@@ -109,6 +109,7 @@ Changes after Sylice's first test (2026-11-17, released as 0.2-beta.4):
 - **Interval slider** 1 s, 3 s, 5 s, 10 s, 30 s, 1 m, 5 m (default 5 s), takes effect at once; each item is checked at most every N seconds for N active items (Sylice), so at most one search a second.
 - **History panel** right of the Sniper panel, for the item clicked in the list: bar chart of the cheapest price per check over the last 15 minutes with the max price as a yellow line; now, average, lowest dip (and when), highest, trend. In memory only (a session).
 - **Layout:** smaller rows; Start/Stop small, on the bottom line with the status. **Popup** opens over the Sniper panel; it can be dragged and remembers its position.
+- History chart fix (beta.6): bars are fixed 15-second slots of the clock, so a bar no longer jumps up and back as time passes (Sylice saw that in beta.5); only the newest bar changes, and the chart scrolls one bar per 15 s. All bars still rescale together when a new lowest or highest price enters or leaves the 15 minutes.
 
 
 - [ ] **Watch list:** items with a **max price** each (e.g. Silk Cloth, 1s 20c) and one **minimum balance** for the account (e.g. never spend below 25s). While the AH window is open, ProfitCraft searches the watched items every few seconds (`C_AuctionHouse.SendSearchQuery`; Blizzard's limit is 100 searches a minute, Forever API docs).
