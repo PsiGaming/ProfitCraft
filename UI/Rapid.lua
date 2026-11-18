@@ -6,9 +6,9 @@
 -- When units at or under an item's max price are listed, a popup offers them; while it shows, only that item is
 -- searched (every second), so the AH's current search is the item being bought, as when buying through Blizzard's
 -- own window. The buy key (default Space) clicks Buy only while the popup shows (SetOverrideBindingClick).
--- Buying follows Blizzard's buy dialog (Forever source: Blizzard_AuctionHouseUI/Shared/Blizzard_AuctionHouseFrame.lua
--- StartCommoditiesPurchase(itemID, quantity, unitPrice); Blizzard_AuctionHouseBuyDialog.lua: COMMODITY_PRICE_UPDATED,
--- then ConfirmCommoditiesPurchase). Starting needs the player's key press or click (HasRestrictions, Forever docs).
+-- Buying: StartCommoditiesPurchase(itemID, quantity) straight from the click, as Auctionator calls it; then
+-- COMMODITY_PRICE_UPDATED and ConfirmCommoditiesPurchase (Blizzard's buy dialog does the same, Forever source:
+-- Blizzard_AuctionHouseUI/Shared/Blizzard_AuctionHouseBuyDialog.lua). Starting needs the player's key press or click (HasRestrictions, Forever docs).
 -- The quantity is taken from the live listings at that moment, capped by the money to keep; the quote must not
 -- exceed the expected cost of exactly those units, else it is cancelled. No quote within QUOTE_TIMEOUT or no result
 -- within RESULT_TIMEOUT: cancelled, scanning goes on. A Blizzard block (ADDON_ACTION_BLOCKED/FORBIDDEN) is reported.
@@ -300,7 +300,10 @@ local function Buy()
 	buyButton:SetEnabled(false)
 	Debug(string.format("asking the AH for a quote: %d x %s, expected %s", quantity, ItemName(popupItemID),
 		PC:FormatMoney(total)))
-	C_AuctionHouse.StartCommoditiesPurchase(popupItemID, quantity, math.ceil(total / quantity))
+	-- Called exactly as Auctionator does it (Source_ModernAH/Tabs/Buying/Commodity/Mixins/Main.lua): two arguments,
+	-- straight from the click. With a third argument (Blizzard's own call) and an error catcher in between, Forever
+	-- refused mouse clicks: "tried to call the protected function StartCommoditiesPurchase()" (Sylice, 2026-11-17).
+	C_AuctionHouse.StartCommoditiesPurchase(popupItemID, quantity)
 	C_Timer.After(QUOTE_TIMEOUT, function()
 		if pending and pending.token == token and not pending.confirmed then
 			Abandon("not bought: the Auction House didn't answer the purchase request within " .. QUOTE_TIMEOUT
@@ -826,7 +829,7 @@ local function CreatePopup()
 	buyButton = CreateFrame("Button", BUY_BUTTON_NAME, popup, "UIPanelButtonTemplate")
 	buyButton:SetSize(220, 32)
 	buyButton:SetPoint("BOTTOM", 0, 12)
-	buyButton:SetScript("OnClick", function() PC:Call("rapidfire buy", Buy) end)
+	buyButton:SetScript("OnClick", Buy)  -- no error catcher in between: the purchase must start straight from the click
 	popup:SetScript("OnHide", ClearBinding)
 	popup.CloseButton:SetScript("OnClick", function()
 		HidePopup()
