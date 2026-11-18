@@ -38,7 +38,9 @@ local rows = {}
 local running, generation, queueIndex, lastCheck = false, 0, 0, nil
 local listings = {}  -- itemID -> { {unit price, units of other sellers}, ... } cheapest first, from the live search
 local history = {}   -- itemID -> { {time, cheapest unit price}, ... } oldest first
-local pending        -- the purchase in progress: { itemID, quantity, expected, confirmed, token }
+local pending        -- the purchase in progress: { itemID, quantity, expected, confirmed, token, cost }
+local session = { spent = 0, items = {}, order = {} }  -- RapidFire purchases during this AH visit (itemID -> {units, cost})
+local sessionText
 local popupItemID    -- the item the popup offers
 local selectedItemID -- the item the history panel shows
 
@@ -318,6 +320,7 @@ PC:RegisterEvent("COMMODITY_PRICE_UPDATED", function(unitPrice, totalPrice)
 	Debug(string.format("quote: %s each, %s in total", PC:FormatMoney(unitPrice), PC:FormatMoney(totalPrice)))
 	if totalPrice <= p.expected and GetMoney() - totalPrice >= Data().minBalance then
 		p.confirmed = true
+		p.cost = totalPrice  -- what the AH charges; counted in the session summary
 		Debug("confirming")
 		C_AuctionHouse.ConfirmCommoditiesPurchase(p.itemID, p.quantity)
 		local token = p.token
@@ -344,7 +347,8 @@ PC:RegisterEvent("COMMODITY_PURCHASE_SUCCEEDED", function()
 	local p = pending
 	if not p then return end
 	pending = nil
-	PC:Print(string.format("bought %d %s for %s.", p.quantity, ItemName(p.itemID), PC:FormatMoney(p.expected)))
+	PC:Print(string.format("bought %d %s for %s.", p.quantity, ItemName(p.itemID), PC:FormatMoney(p.cost or p.expected)))
+	Rapid:AddToSession(p.itemID, p.quantity, p.cost or p.expected)
 	if popupItemID == p.itemID then Flash(string.format("Bought %d for %s", p.quantity, PC:FormatMoney(p.expected))) end
 	if running then Search(p.itemID) end
 end)
@@ -428,9 +432,59 @@ function Rapid:GetPopupItem() return popupItemID end
 function Rapid:IsFlashing() return popup and popup.flashing end
 function Rapid:IsBuying() return pending ~= nil end
 
+---------------------------------------------------------------------------
+-- Session summary: what RapidFire bought during this AH visit. Shown on the panel; printed to chat and reset when
+-- the AH closes (Sylice, 2026-11-17). Purchases made with Blizzard's or Auctionator's buttons are not included: the
+-- game reports those without item, quantity or price.
+---------------------------------------------------------------------------
+
+local function SessionLines()
+	local parts = {}
+	for _, itemID in ipairs(session.order) do
+		local item = session.items[itemID]
+		parts[#parts + 1] = string.format("%d %s (%s)", item.units, ItemName(itemID), PC:FormatMoney(item.cost))
+	end
+	return parts
+end
+
+function Rapid:AddToSession(itemID, units, cost)
+	local item = session.items[itemID]
+	if not item then
+		item = { units = 0, cost = 0 }
+		session.items[itemID] = item
+		session.order[#session.order + 1] = itemID
+	end
+	item.units = item.units + units
+	item.cost = item.cost + cost
+	session.spent = session.spent + cost
+	if Refresh then Refresh() end
+end
+
+function Rapid:GetSession() return session end
+
+local function UpdateSessionText()
+	if not sessionText then return end
+	if #session.order == 0 then
+		sessionText:SetText("This session: nothing bought yet.")
+	else
+		sessionText:SetText("This session: spent " .. PC:FormatMoney(session.spent) .. "  -  "
+			.. table.concat(SessionLines(), ", "))
+	end
+end
+
+local function ResetSession()
+	session = { spent = 0, items = {}, order = {} }
+	UpdateSessionText()
+end
+
 PC:RegisterEvent("AUCTION_HOUSE_CLOSED", function()
 	if running then Stop() end
 	HidePopup()
+	if #session.order > 0 then
+		PC:Print("RapidFire session: spent " .. PC:FormatMoney(session.spent) .. " on " .. table.concat(SessionLines(), ", ")
+			.. ".")
+	end
+	ResetSession()
 end)
 
 ---------------------------------------------------------------------------
@@ -676,6 +730,7 @@ function Refresh()
 	end
 	keyButton:SetText("Buy key: " .. GetBindingText(Data().key))
 	UpdateStatus()
+	UpdateSessionText()
 	UpdateHistoryPanel()
 end
 
@@ -782,6 +837,13 @@ local function CreatePanel()
 	keyButton = CreateKeyButton(inset)
 	keyButton:SetPoint("TOPLEFT", 160, y)
 
+	y = y - 30
+	sessionText = inset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	sessionText:SetPoint("TOPLEFT", 10, y)
+	sessionText:SetPoint("RIGHT", inset, "RIGHT", -10, 0)
+	sessionText:SetJustifyH("LEFT")
+	sessionText:SetMaxLines(2)
+
 	-- Bottom line: the status, and Start/Stop at the right (Sylice, 2026-11-17).
 	startButton = CreateFrame("Button", nil, inset, "UIPanelButtonTemplate")
 	startButton:SetSize(80, 22)
@@ -851,6 +913,7 @@ local function CreateToggle()
 end
 
 PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()
+	ResetSession()  -- a new AH visit (also if the last one ended without the closing event)
 	if not AuctionHouseFrame then return end
 	if not toggleButton then
 		CreateToggle()
