@@ -28,6 +28,7 @@ local RESULT_TIMEOUT = 10
 local HISTORY_SECONDS = 15 * 60
 local HISTORY_BARS = 60
 local INTERVALS = { 1, 3, 5, 10, 30, 60, 300 }
+local TOLERANCES = { 0, 5, 10, 15, 20, 25 }  -- % above the max price a purchase may still cost on average
 local ROW_HEIGHT = 24
 local BUY_BUTTON_NAME = "ProfitCraftRapidFireBuy"
 local SORT_BY_PRICE = { { sortOrder = Enum.AuctionHouseSortOrder and Enum.AuctionHouseSortOrder.Price or 0, reverseSort = false } }
@@ -39,6 +40,8 @@ local running, generation, queueIndex, lastCheck = false, 0, 0, nil
 local listings = {}  -- itemID -> { {unit price, units of other sellers}, ... } cheapest first, from the live search
 local history = {}   -- itemID -> { {time, cheapest unit price}, ... } oldest first
 local pending        -- the purchase in progress: { itemID, quantity, expected, confirmed, token, cost }
+local lastRequest     -- the last purchase request sent: { itemID, version of the item's listings then }
+local listingsVersion = {}  -- itemID -> count of listing updates (a new state of the listings allows a new request)
 local session = { spent = 0, items = {}, order = {} }  -- RapidFire purchases during this AH visit (itemID -> {units, cost})
 local sessionText
 local popupItemID    -- the item the popup offers
@@ -188,7 +191,11 @@ local function UpdatePopup()
 	popup.note:SetText("You keep " .. PC:FormatMoney(GetMoney() - total) .. " (at least "
 		.. PC:FormatMoney(Data().minBalance) .. ").")
 	buyButton:SetText("BUY  (" .. GetBindingText(Data().key) .. ")")
-	buyButton:SetEnabled(pending == nil)
+	-- Greyed while a purchase runs or the same request was just sent (until fresh listings arrive). Done here, outside
+	-- the click, never inside it before the purchase call.
+	local repeated = lastRequest and lastRequest.itemID == popupItemID
+		and lastRequest.version == (listingsVersion[popupItemID] or 0)
+	buyButton:SetEnabled(pending == nil and not repeated)
 end
 
 local function PlacePopup()
@@ -267,6 +274,7 @@ local function ReadListings(itemID)
 	end
 	table.sort(levels, function(a, b) return a[1] < b[1] end)
 	listings[itemID] = levels
+	listingsVersion[itemID] = (listingsVersion[itemID] or 0) + 1
 	if levels[1] then Record(itemID, levels[1][1]) end
 	Evaluate(itemID)
 	if UpdateHistoryPanel and itemID == selectedItemID then UpdateHistoryPanel() end
@@ -293,19 +301,24 @@ local function Abandon(message, cancel)
 	Evaluate(p.itemID)
 end
 
+-- The purchase call comes FIRST in the click: Forever blocks it when the click has already disabled its own button
+-- ("tried to call the protected function StartCommoditiesPurchase()", Sylice 2026-11-17; same finding and fix in
+-- other Forever AH addons: Goldbook PR #90, GoldCap PR #22). Before it only plain checks; button, chat and timers after.
+-- A request is sent once per state of the listings: pressing again does nothing until fresh listings for the item
+-- arrive (no repeated requests to the server, also after a blocked or refused one).
 local function Buy()
 	if pending or not popupItemID or popup.flashing then return end
-	local quantity, total = Rapid:GetDeal(popupItemID)
+	local itemID = popupItemID
+	if lastRequest and lastRequest.itemID == itemID and lastRequest.version == (listingsVersion[itemID] or 0) then return end
+	local quantity, total = Rapid:GetDeal(itemID)
 	if quantity == 0 then return end
+	C_AuctionHouse.StartCommoditiesPurchase(itemID, quantity)  -- two arguments, as Auctionator calls it
+	lastRequest = { itemID = itemID, version = listingsVersion[itemID] or 0 }
 	local token = {}
-	pending = { itemID = popupItemID, quantity = quantity, expected = total, token = token }
+	pending = { itemID = itemID, quantity = quantity, expected = total, token = token }
 	buyButton:SetEnabled(false)
-	Debug(string.format("asking the AH for a quote: %d x %s, expected %s", quantity, ItemName(popupItemID),
+	Debug(string.format("asked the AH for a quote: %d x %s, expected %s", quantity, ItemName(itemID),
 		PC:FormatMoney(total)))
-	-- Called exactly as Auctionator does it (Source_ModernAH/Tabs/Buying/Commodity/Mixins/Main.lua): two arguments,
-	-- straight from the click. With a third argument (Blizzard's own call) and an error catcher in between, Forever
-	-- refused mouse clicks: "tried to call the protected function StartCommoditiesPurchase()" (Sylice, 2026-11-17).
-	C_AuctionHouse.StartCommoditiesPurchase(popupItemID, quantity)
 	C_Timer.After(QUOTE_TIMEOUT, function()
 		if pending and pending.token == token and not pending.confirmed then
 			Abandon("not bought: the Auction House didn't answer the purchase request within " .. QUOTE_TIMEOUT
@@ -318,7 +331,14 @@ PC:RegisterEvent("COMMODITY_PRICE_UPDATED", function(unitPrice, totalPrice)
 	local p = pending
 	if not p or p.confirmed then return end
 	Debug(string.format("quote: %s each, %s in total", PC:FormatMoney(unitPrice), PC:FormatMoney(totalPrice)))
-	if totalPrice <= p.expected and GetMoney() - totalPrice >= Data().minBalance then
+	-- Accepted when it costs what was expected, or (price tolerance) when the average per unit stays within the
+	-- tolerance above the max price (Sylice, 2026-11-17: trigger at the max, still buy if the price moved a little).
+	-- 0% stays strict: exactly the expected cost (no unit above the max).
+	local limit = p.expected
+	if Data().tolerance > 0 then
+		limit = math.max(limit, math.floor(Entry(p.itemID).max * (1 + Data().tolerance / 100)) * p.quantity)
+	end
+	if totalPrice <= limit and GetMoney() - totalPrice >= Data().minBalance then
 		p.confirmed = true
 		p.cost = totalPrice  -- what the AH charges; counted in the session summary
 		Debug("confirming")
@@ -330,8 +350,8 @@ PC:RegisterEvent("COMMODITY_PRICE_UPDATED", function(unitPrice, totalPrice)
 			end
 		end)
 	else
-		Abandon(string.format("not bought: %d would now cost %s instead of %s (someone bought first).", p.quantity,
-			PC:FormatMoney(totalPrice), PC:FormatMoney(p.expected)), true)
+		Abandon(string.format("not bought: %d would now cost %s (%s each), more than allowed (%s).", p.quantity,
+			PC:FormatMoney(totalPrice), PC:FormatMoney(math.floor(totalPrice / p.quantity + 0.5)), PC:FormatMoney(limit)), true)
 	end
 end)
 
@@ -624,7 +644,7 @@ end
 -- The history panel: a bar chart of the cheapest price at each check (last 15 minutes, in time slots), the max price
 -- as a line, and the numbers below it.
 local function CreateHistoryPanel()
-	historyPanel = PC:CreateWindow("ProfitCraftRapidFireHistory", panel, 300, 538, "Price history")
+	historyPanel = PC:CreateWindow("ProfitCraftRapidFireHistory", panel, 300, 580, "Price history")
 	historyPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 2, 0)
 	local inset = historyPanel.Inset
 	historyPanel.itemName = Label(inset, "", 10, -8, "GameFontNormal")
@@ -758,6 +778,32 @@ local function CreateIntervalSlider(parent, y)
 	return slider
 end
 
+local function CreateToleranceSlider(parent, y)
+	Label(parent, "Price tolerance at purchase", 10, y)
+	local position = 1
+	for index, percent in ipairs(TOLERANCES) do
+		if percent == Data().tolerance then position = index end
+	end
+	local slider = CreateFrame("Frame", nil, parent, "MinimalSliderWithSteppersTemplate")
+	slider:SetWidth(240)
+	slider:SetPoint("TOPLEFT", 160, y + 4)
+	slider:Init(position, 1, #TOLERANCES, #TOLERANCES - 1, { [MinimalSliderWithSteppersMixin.Label.Right] =
+		function(p) return "+" .. TOLERANCES[math.floor(p + 0.5)] .. "%" end })
+	slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, p)
+		Data().tolerance = TOLERANCES[math.floor(p + 0.5)]
+	end, parent)
+	slider.Slider:HookScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("Price tolerance at purchase", 1, 1, 1)
+		GameTooltip:AddLine("A deal is offered when units are at or under your max price. If the price moved before the "
+			.. "Auction House answers, the purchase still goes through as long as the average per unit is at most this "
+			.. "much above your max. 0% = never above your max.", nil, nil, nil, true)
+		GameTooltip:Show()
+	end)
+	slider.Slider:HookScript("OnLeave", function() GameTooltip:Hide() end)
+	return slider
+end
+
 local function CreateKeyButton(parent)
 	local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 	button:SetSize(130, 20)
@@ -782,7 +828,7 @@ local function CreateKeyButton(parent)
 end
 
 local function CreatePanel()
-	panel = PC:CreateWindow("ProfitCraftRapidFire", AuctionHouseFrame, 440, 538, "ProfitCraft RapidFire")
+	panel = PC:CreateWindow("ProfitCraftRapidFire", AuctionHouseFrame, 440, 580, "ProfitCraft RapidFire")
 	panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 2, 0)
 	local inset = panel.Inset
 	inset:EnableMouse(true)
@@ -825,6 +871,9 @@ local function CreatePanel()
 
 	y = y - 30
 	intervalSlider = CreateIntervalSlider(inset, y)
+
+	y = y - 30
+	CreateToleranceSlider(inset, y)
 
 	y = y - 30
 	local sound = CreateFrame("CheckButton", nil, inset, "UICheckButtonTemplate")

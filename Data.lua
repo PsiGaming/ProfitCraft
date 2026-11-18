@@ -64,6 +64,7 @@ PC:RegisterEvent("ADDON_LOADED", function(name)
 	rapidFire.interval = rapidFire.interval or 5
 	if rapidFire.sound == nil then rapidFire.sound = true end
 	rapidFire.key = rapidFire.key or "SPACE"
+	rapidFire.tolerance = rapidFire.tolerance or 0  -- % above the max a purchase may cost on average if the price moved
 	db.rapidFire = rapidFire
 	ProfitCraftDB = db
 	PC.db = db
