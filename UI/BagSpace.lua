@@ -20,49 +20,49 @@ local overlays = {}  -- "reagent" / "backpack" -> overlay frame on that bag butt
 local blizzardHidden = false
 
 local function CreateOverlay(button)
-	local overlay = CreateFrame("Frame", nil, button)
-	overlay:SetAllPoints()
-	overlay:SetFrameLevel(button:GetFrameLevel() + 2)
-	overlay.text = overlay:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-	overlay.text:SetPoint("CENTER", 0, -10)
-	overlay:Hide()
-	return overlay
+  local overlay = CreateFrame("Frame", nil, button)
+  overlay:SetAllPoints()
+  overlay:SetFrameLevel(button:GetFrameLevel() + 2)
+  overlay.text = overlay:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+  overlay.text:SetPoint("CENTER", 0, -10)
+  overlay:Hide()
+  return overlay
 end
 
 -- "(reagent|normal)", or "(normal)" without a reagent bag; nil when the reagent bag button should stay empty.
 local function SplitText(where)
-	local total = C_Container.CalculateTotalNumberOfFreeBagSlots() or 0
-	if (C_Container.GetContainerNumSlots(REAGENT_BAG) or 0) == 0 then
-		if where == "reagent" then return nil end
-		return string.format("(%d)", total)
-	end
-	local reagentFree = C_Container.GetContainerNumFreeSlots(REAGENT_BAG) or 0
-	return string.format("(%d|%d)", reagentFree, total - reagentFree)
+  local total = C_Container.CalculateTotalNumberOfFreeBagSlots() or 0
+  if (C_Container.GetContainerNumSlots(REAGENT_BAG) or 0) == 0 then
+    if where == "reagent" then return nil end
+    return string.format("(%d)", total)
+  end
+  local reagentFree = C_Container.GetContainerNumFreeSlots(REAGENT_BAG) or 0
+  return string.format("(%d|%d)", reagentFree, total - reagentFree)
 end
 
 local function Update()
-	local mode = PC.db.settings.freeSlots
-	for where, overlay in pairs(overlays) do
-		local text = where == mode and SplitText(where)
-		if text then overlay.text:SetText(text) end
-		overlay:SetShown(text and true or false)
-	end
-	local blizzardCount = MainMenuBarBackpackButton and MainMenuBarBackpackButton.FreeSlots
-	if blizzardCount and (mode == "backpack") ~= blizzardHidden then
-		blizzardHidden = mode == "backpack"
-		blizzardCount:SetAlpha(blizzardHidden and 0 or 1)
-	end
+  local mode = PC.db.settings.freeSlots
+  for where, overlay in pairs(overlays) do
+    local text = where == mode and SplitText(where)
+    if text then overlay.text:SetText(text) end
+    overlay:SetShown(text and true or false)
+  end
+  local blizzardCount = MainMenuBarBackpackButton and MainMenuBarBackpackButton.FreeSlots
+  if blizzardCount and (mode == "backpack") ~= blizzardHidden then
+    blizzardHidden = mode == "backpack"
+    blizzardCount:SetAlpha(blizzardHidden and 0 or 1)
+  end
 end
 
 PC:RegisterEvent("PLAYER_LOGIN", function()
-	if CharacterReagentBag0Slot then overlays.reagent = CreateOverlay(CharacterReagentBag0Slot) end
-	if MainMenuBarBackpackButton then overlays.backpack = CreateOverlay(MainMenuBarBackpackButton) end
-	Update()
+  if CharacterReagentBag0Slot then overlays.reagent = CreateOverlay(CharacterReagentBag0Slot) end
+  if MainMenuBarBackpackButton then overlays.backpack = CreateOverlay(MainMenuBarBackpackButton) end
+  Update()
 end)
 
 -- Blizzard updates its own count one frame after bag changes (to avoid races when moving bags); same here.
 PC:RegisterEvent("BAG_UPDATE_DELAYED", function() C_Timer.After(0, function() PC:Call("free bag slots", Update) end) end)
 PC:RegisterEvent("PLAYER_ENTERING_WORLD", Update)
 PC:Listen("SETTINGS_CHANGED", function(key)
-	if key == "freeSlots" then Update() end
+  if key == "freeSlots" then Update() end
 end)

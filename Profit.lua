@@ -24,77 +24,77 @@ local ranked = {}     -- mode -> sorted list of results
 -- Profit for one full stack of the product: the reagents for enough crafts to make a stack are priced together,
 -- because buying more can cost more per unit (Prices:GetReagentCost). Per item made, times the stack size.
 local function StackProfit(result, cut)
-	if not result.stackSize then return nil end
-	local crafts = math.ceil(result.stackSize / result.quantity)
-	local made = crafts * result.quantity
-	local cost = 0
-	for _, line in ipairs(result.reagents) do
-		local total = PC.Prices:GetReagentCost(line.itemID, line.quantity * crafts)
-		if not total then return nil end
-		cost = cost + total
-	end
-	return (result.salePrice * made * (1 - cut) - cost) * result.stackSize / made
+  if not result.stackSize then return nil end
+  local crafts = math.ceil(result.stackSize / result.quantity)
+  local made = crafts * result.quantity
+  local cost = 0
+  for _, line in ipairs(result.reagents) do
+    local total = PC.Prices:GetReagentCost(line.itemID, line.quantity * crafts)
+    if not total then return nil end
+    cost = cost + total
+  end
+  return (result.salePrice * made * (1 - cut) - cost) * result.stackSize / made
 end
 
 local function Evaluate(recipe, cut)
-	local result = { recipe = recipe, missing = {}, reagents = {} }
-	result.quantity = (recipe.quantityMin + recipe.quantityMax) / 2
+  local result = { recipe = recipe, missing = {}, reagents = {} }
+  result.quantity = (recipe.quantityMin + recipe.quantityMax) / 2
 
-	local cost, complete = 0, true
-	for _, reagent in ipairs(recipe.reagents) do
-		local bestItem, bestTotal, bestHow, bestListed
-		for _, itemID in ipairs(reagent.items) do
-			local total, how, listed = PC.Prices:GetReagentCost(itemID, reagent.quantity)
-			if total and (not bestTotal or total < bestTotal) then
-				bestItem, bestTotal, bestHow, bestListed = itemID, total, how, listed
-			end
-		end
-		local itemID = bestItem or reagent.items[1]
-		local line = { itemID = itemID, quantity = reagent.quantity, how = bestHow, listed = bestListed }
-		if bestTotal then
-			line.total = bestTotal
-			line.unit = bestTotal / reagent.quantity
-			cost = cost + line.total
-		else
-			complete = false
-			result.missing[#result.missing + 1] = itemID
-		end
-		result.reagents[#result.reagents + 1] = line
-	end
-	result.cost = complete and cost or nil
+  local cost, complete = 0, true
+  for _, reagent in ipairs(recipe.reagents) do
+    local bestItem, bestTotal, bestHow, bestListed
+    for _, itemID in ipairs(reagent.items) do
+      local total, how, listed = PC.Prices:GetReagentCost(itemID, reagent.quantity)
+      if total and (not bestTotal or total < bestTotal) then
+        bestItem, bestTotal, bestHow, bestListed = itemID, total, how, listed
+      end
+    end
+    local itemID = bestItem or reagent.items[1]
+    local line = { itemID = itemID, quantity = reagent.quantity, how = bestHow, listed = bestListed }
+    if bestTotal then
+      line.total = bestTotal
+      line.unit = bestTotal / reagent.quantity
+      cost = cost + line.total
+    else
+      complete = false
+      result.missing[#result.missing + 1] = itemID
+    end
+    result.reagents[#result.reagents + 1] = line
+  end
+  result.cost = complete and cost or nil
 
-	local outputItemID = recipe.outputItemID
-	if outputItemID then
-		result.bound = PC.Items:IsBindOnPickup(outputItemID)
-		result.salePrice = not result.bound and PC.Prices:GetAuctionPrice(outputItemID) or nil
-		if result.bound then
-			complete = false  -- can't be sold: no sale profit, only craft-and-disenchant
-		elseif not result.salePrice then
-			complete = false
-			table.insert(result.missing, 1, outputItemID)
-		end
-		result.stackSize = PC.Items:GetStackSize(outputItemID)
-		result.disenchantValue = PC.Disenchant:GetValue(outputItemID)
-	else
-		complete = false
-		result.noProduct = true
-	end
+  local outputItemID = recipe.outputItemID
+  if outputItemID then
+    result.bound = PC.Items:IsBindOnPickup(outputItemID)
+    result.salePrice = not result.bound and PC.Prices:GetAuctionPrice(outputItemID) or nil
+    if result.bound then
+      complete = false  -- can't be sold: no sale profit, only craft-and-disenchant
+    elseif not result.salePrice then
+      complete = false
+      table.insert(result.missing, 1, outputItemID)
+    end
+    result.stackSize = PC.Items:GetStackSize(outputItemID)
+    result.disenchantValue = PC.Disenchant:GetValue(outputItemID)
+  else
+    complete = false
+    result.noProduct = true
+  end
 
-	result.complete = complete
-	if complete then
-		result.profitCraft = result.salePrice * result.quantity * (1 - cut) - result.cost
-		result.profitItem = result.profitCraft / result.quantity
-		result.profitStack = StackProfit(result, cut)
-	end
-	if result.cost and result.disenchantValue then
-		result.profitDisenchant = result.disenchantValue * result.quantity * (1 - cut) - result.cost
-	end
-	return result
+  result.complete = complete
+  if complete then
+    result.profitCraft = result.salePrice * result.quantity * (1 - cut) - result.cost
+    result.profitItem = result.profitCraft / result.quantity
+    result.profitStack = StackProfit(result, cut)
+  end
+  if result.cost and result.disenchantValue then
+    result.profitDisenchant = result.disenchantValue * result.quantity * (1 - cut) - result.cost
+  end
+  return result
 end
 
 -- One recipe's result with the current AH cut (for tooltips, outside the stored results).
 function Profit:Evaluate(recipe)
-	return Evaluate(recipe, PC.db.settings.ahCut)
+  return Evaluate(recipe, PC.db.settings.ahCut)
 end
 
 local PROFIT_FIELD = { craft = "profitCraft", stack = "profitStack", disenchant = "profitDisenchant" }
@@ -102,45 +102,45 @@ Profit.PROFIT_FIELD = PROFIT_FIELD
 
 -- Results sorted for a mode: complete results by profit (highest first), then incomplete ones by name.
 function Profit:GetRanked(mode)
-	if ranked[mode] then return ranked[mode] end
-	local field = PROFIT_FIELD[mode] or "profitCraft"
-	local list = {}
-	for _, result in pairs(self.results) do
-		if not result.noProduct then list[#list + 1] = result end
-	end
-	table.sort(list, function(a, b)
-		local pa, pb = a[field], b[field]
-		if (pa ~= nil) ~= (pb ~= nil) then return pa ~= nil end
-		if pa and pb and pa ~= pb then return pa > pb end
-		return a.recipe.name < b.recipe.name
-	end)
-	ranked[mode] = list
-	return list
+  if ranked[mode] then return ranked[mode] end
+  local field = PROFIT_FIELD[mode] or "profitCraft"
+  local list = {}
+  for _, result in pairs(self.results) do
+    if not result.noProduct then list[#list + 1] = result end
+  end
+  table.sort(list, function(a, b)
+    local pa, pb = a[field], b[field]
+    if (pa ~= nil) ~= (pb ~= nil) then return pa ~= nil end
+    if pa and pb and pa ~= pb then return pa > pb end
+    return a.recipe.name < b.recipe.name
+  end)
+  ranked[mode] = list
+  return list
 end
 
 function Profit:Recalculate()
-	if not PC.Recipes.isOpen then return end  -- reopening reads the recipes again, which recalculates
-	local cut = PC.db.settings.ahCut
-	local results = {}
-	for _, recipe in ipairs(PC.Recipes.list) do
-		results[recipe.recipeID] = Evaluate(recipe, cut)
-	end
-	self.results = results
-	ranked = {}
-	PC:Send("RESULTS_CHANGED")
+  if not PC.Recipes.isOpen then return end  -- reopening reads the recipes again, which recalculates
+  local cut = PC.db.settings.ahCut
+  local results = {}
+  for _, recipe in ipairs(PC.Recipes.list) do
+    results[recipe.recipeID] = Evaluate(recipe, cut)
+  end
+  self.results = results
+  ranked = {}
+  PC:Send("RESULTS_CHANGED")
 end
 
 local function Schedule()
-	PC:Debounce("profit", 0.2, function() Profit:Recalculate() end)
+  PC:Debounce("profit", 0.2, function() Profit:Recalculate() end)
 end
 
 PC:Listen("RECIPES_CHANGED", Schedule)
 PC:Listen("PRICES_CHANGED", Schedule)
 PC:Listen("ITEM_DATA_CHANGED", Schedule)
 PC:Listen("PROFESSION_CLOSED", function()
-	Profit.results = {}
-	ranked = {}
+  Profit.results = {}
+  ranked = {}
 end)
 PC:Listen("SETTINGS_CHANGED", function(key)
-	if key == "ahCut" then Schedule() end
+  if key == "ahCut" then Schedule() end
 end)

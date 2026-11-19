@@ -76,7 +76,7 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 
 ## Version 0.2 (profit works without Auctionator; history and on-sale need it)
 
-**Closed: final `0.2` published 2026-11-19** (same code as 0.2-beta.10, used by Sylice for several days; made a normal GitHub release, not a pre-release, at Sylice's request; Sylice, 2026-11-19).
+**Closed: final `0.2` published 2026-11-19** (same code as 0.2-beta.10, used by Sylice for several days; GitHub pre-release, briefly a normal release for a WowUp test; Sylice, 2026-11-19).
 
 From 0.2 on there are no alphas: each beta adds features, rc = done, fixes only (Sylice, 2026-11-17).
 
@@ -174,7 +174,7 @@ Changes after Sylice's first test (2026-11-17, released as 0.2-beta.4):
 
 Goal (Sylice, 2026-11-19): RapidFire works but needs constant speed and attention, and others (people or bots) take cheap cloth within seconds. Instead: a character stands at the AH with the game in the background; ProfitCraft keeps checking broad searches and plays a sound on a find; Sylice switches to the game and decides.
 
-**Published as `0.3-beta.0` on 2026-11-19** (GitHub pre-release, zip `ProfitCraft-0.3-beta.0-forever.zip`). Everything below is in it. `v0.2` was left a normal release on purpose (Sylice: test whether WowUp offers the pre-release anyway; WowUp's source says it won't on the Stable channel); it goes back to pre-release after that test.
+**Published as `0.3-beta.0` on 2026-11-19** (GitHub pre-release, zip `ProfitCraft-0.3-beta.0-forever.zip`). Everything below is in it. WowUp (Stable) didn't offer it while `v0.2` was a normal release, as WowUp's source predicted; `v0.2` was switched back to a pre-release the same day (Sylice).
 
 Decided 2026-11-19 (Sylice): On Sale gets **its own searches and its own price history**, so it works without Auctionator and keeps random suffixes apart. Searches by name and suffix are expected to be one of ProfitCraft's best profit features (Sylice). Design: DESIGN.md section 13.
 
@@ -188,6 +188,7 @@ Decided 2026-11-19 (Sylice): On Sale gets **its own searches and its own price h
 - [x] **Alert:** a sound on each new hit (setting on/off); a **gold screen glow** (Blizzard's low-health glow, tinted gold) that pulses until the mouse is over the AH window or the On Sale panel (setting on/off; Sylice, 2026-11-19: the taskbar flash likely won't work under Wine); and the taskbar flash (`FlashClientIcon`: Blizzard uses it for PvP queue pops and ready checks, `Blizzard_LFGUtil/Mainline/PVPHelper.lua`; whether it reaches the desktop under Wine is for Sylice to test). Needs Blizzard's "Sound in Background" on (Options > Audio; CVar `Sound_EnableSoundWhenGameIsInBG`, Forever settings source); ProfitCraft says so when the watch starts and it is off.
 - [x] **Thresholds** (Sylice, 2026-11-19): gear 65% below the usual price, reagents 40% below (the sliders below), and a **minimum profit of 50s** per hit (setting) so cheap items don't keep alerting. Profit = usual price after the AH cut, minus the price.
 - Without Auctionator, On Sale works fully once our own history has 3 days (replaces the 2026-11-17 decision "without Auctionator there is no history, so no On Sale").
+- [x] **Per-search rule** (released in 0.3.1, 2026-11-19; Sylice, 2026-11-19), a toggle in the search editor, **either/or**: a **fixed price** ("at or under 30s"; per item for gear, per unit for stackable goods; needs no history, so it works from the first minute) **or** a **discount** ("65% below the usual price", prefilled from the setting, which becomes the default for new searches) with its own minimum profit (prefilled from the setting). Why: the history needs 3 separate days per item and suffix, so a discount search for suffixed gear finds nothing for the first days. History requirement unchanged (3 days); to revisit after use. Also built (not released): Tab/Shift-Tab between the editor fields; Searches is now the left page button, Finds the right.
 - To check in game (Sylice; not blocking the build):
   - **Idle logout:** WoW usually logs out after 30 minutes without input (Blizzard forum citing Wowpedia; nothing Forever-specific found). Whether addon searches count as activity is unknown: leave RapidFire running untouched for 35 minutes. Nothing will be built to fake input (ToS).
   - **Suffix text search:** type "of the Knight" in Blizzard's own AH search box; Auctionator passes the text to the server unchanged (`Source_ModernAH/Search/Mixins/DirectSearchProviderMixin.lua`), so whether suffixes match is the server's behaviour. If not, ProfitCraft searches the category without text and matches the names itself.

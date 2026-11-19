@@ -341,9 +341,19 @@ What and why: `FEATURES.md` "Version 0.3". Goal: a character waits at the AH wit
 - **Quality** is read as "this or better" (Sylice: "Uncommon or better"); Auctionator reads its quality field as exactly that quality.
 - **Stackable or gear** while the item data isn't cached (`C_Item.IsItemDataCachedByID`): weapons and armor (`GetItemInfoInstant` class 2/4) count as gear, everything else as stackable, so a full scan requests no item data.
 
-### History (own, per item and suffix)
+### Fixes after Sylice's first full scan (2026-11-19, `data/screenshots/signal-2026-11-19-17-03-22-446.jpg`: 311 finds; released as `0.3.1` on 2026-11-19, not yet seen in game)
 
-- **Key:** `itemID:suffix` (ItemKey's `itemSuffix`, 0 when none) per ruleset key (section 6). Item level is left out of the key: on Forever an item ID has one item level unless scaled; to revisit if results show several levels per item ID.
+- **Suffix from the name, not the link:** "Engraved Cape of the Beast" got Auctionator's (suffix-mixed) usual price, so the link's suffixID field doesn't carry Forever's random suffix. Weapons and armour are now keyed by their full name in lower case (`OnSale:Variant`); a browse result whose name is unknown or lacks the suffix uses `#<itemSuffix>`. **Weapons and armour never use Auctionator's history.** Gear found by a full scan has no item key; clicking it first runs a browse search for its name and takes the result whose name matches.
+- **Blank names:** the scan returns `""` as the name of items whose data isn't loaded; then the name comes from the item link (gear) or the item data (display).
+- **Market check** (percent rule only): more than half of the units listed (stackable goods), or more than half of the listings when there are at least 3 (gear, full scans), under the On Sale price = the market moved, no find. Cause seen: prices fell since launch, and placeholder prices (99g 99s 98c) as an item's daily low.
+- **Per-search rule, either/or** (Sylice): **percent** (own percent, empty = the settings by item type; own minimum profit, prefilled from the setting) or **fixed price** (at or under a price; no history, no crumb or market check, profit shown only when a usual price is known). Stored on the search (`rule`, `percent`, `minProfit`, `maxPrice`), not in the Auctionator text. Full scans use the settings.
+- **Rounding:** limits use whole numbers (`usual * (100 - percent) / 100`); `usual * (1 - 0.8)` gave 19s 99c for a 1g usual price.
+- Tab and Shift-Tab between the editor's fields (hidden ones skipped); Searches is the left page button, Finds the right.
+- Tests: 303 checks + 15 without Auctionator.
+
+### History (own, per item and variant)
+
+- **Key:** `itemID:variant` per ruleset key (section 6): variant 0, or for weapons and armour the full name in lower case (see the fixes above; was `itemID:suffix` in 0.3-beta.0). Item level is left out of the key: on Forever an item ID has one item level unless scaled; to revisit if results show several levels per item ID.
 - **Samples:** each time ProfitCraft sees an item's cheapest price from other sellers (a browse result, or the lowest buyout per unit of that key in a full scan), it keeps it as that hour's sample (first sample per hour per key). Own listings: a browse row with `containsOwnerItem` is skipped for history (its minimum may be ours); full scans skip own listings as in section 9.
 - **Daily price** = the median of that day's hourly samples. Using the lowest price of the day instead would follow every short-lived cheap listing that bots snap up, and a watch that searches every minute sees far more of those than a scan every few hours (Auctionator's daily low comes from scans), so the usual price would drift down.
 - **Usual price** = the median of the last 7 daily prices, once there are at least 3 days. Kept: 14 days; a key not seen for 14 days is dropped.
