@@ -433,6 +433,7 @@ end
 
 local function Start()
 	if running then return end
+	if PC.OnSale and PC.OnSale:IsRunning() then PC.OnSale:Stop("RapidFire started (only one can search at a time).") end
 	running = true
 	queueIndex = 0
 	Reschedule()
@@ -448,6 +449,7 @@ function Stop(reason)
 end
 
 function Rapid:IsRunning() return running end
+function Rapid:Stop(reason) if running then Stop(reason) end end
 function Rapid:GetPopupItem() return popupItemID end
 function Rapid:IsFlashing() return popup and popup.flashing end
 function Rapid:IsBuying() return pending ~= nil end
@@ -957,6 +959,7 @@ local function CreateToggle()
 		PC:Call("rapidfire panel", function()
 			if not panel then CreatePanel() end
 			panel:SetShown(not panel:IsShown())
+			if panel:IsShown() then PC:Send("AH_PANEL_SHOWN", "rapid") end  -- one panel at the AH's edge at a time
 		end)
 	end)
 end
@@ -968,6 +971,10 @@ PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()
 		CreateToggle()
 		CreatePopup()
 	end
+end)
+
+PC:Listen("AH_PANEL_SHOWN", function(which)
+	if which ~= "rapid" and panel then panel:Hide() end
 end)
 
 PC:Listen("ITEM_DATA_CHANGED", function()

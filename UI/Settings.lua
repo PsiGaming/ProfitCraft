@@ -12,8 +12,14 @@
 local _, PC = ...
 
 local CRUMB_VALUES = { 0.5, 1, 2, 3 }  -- % of all units listed
+local GEAR_DISCOUNTS = { 50, 55, 60, 65, 70, 75, 80, 85, 90 }
+local REAGENT_DISCOUNTS = { 40, 45, 50, 55, 60, 65, 70, 75 }
+local MIN_PROFITS = { 0, 1000, 2500, 5000, 10000, 25000, 50000, 100000 }  -- copper
+local ONSALE_INTERVALS = { 5, 10, 15, 30, 60, 120 }  -- seconds
+local COLUMN_WIDTH = 340
 
--- In display order; { divider = true } draws a line between sections, { title = "..." } a section heading.
+-- In display order; { divider = true } draws a line between sections, { title = "..." } a section heading,
+-- { column = true } starts the next column.
 -- A slider with `values` steps through that list; without, through whole numbers from min to max.
 local OPTIONS = {
 	{ title = "PRICES" },
@@ -56,6 +62,32 @@ local OPTIONS = {
 	{ key = "debug", label = "Debug mode: show errors in chat",
 		help = "Errors are always logged (/pcraft errors). With debug mode on they are also printed in chat as "
 			.. "they happen." },
+	{ column = true },
+	{ title = "ON SALE" },
+	{ key = "onSaleGear", slider = { values = GEAR_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+		label = "Gear and other single items on sale at",
+		help = "A find needs a price at least this far below the item's usual price (the median of its last 7 daily "
+			.. "prices). Example: 65% = at 35% of the usual price or less." },
+	{ key = "onSaleReagent", slider = { values = REAGENT_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+		label = "Stackable goods on sale at",
+		help = "The same for reagents, cloth, herbs and other stackable goods. Tiny amounts (under the \"ignore cheap "
+			.. "amounts\" share above) never count." },
+	{ key = "onSaleMinProfit", slider = { values = MIN_PROFITS,
+		format = function(v) return v == 0 and "any" or PC:FormatMoney(v) end },
+		label = "Minimum profit per find",
+		help = "Finds earning less than this (usual price after the AH cut, minus what you'd pay) are not shown, so "
+			.. "cheap items don't keep alerting you." },
+	{ key = "onSaleInterval", slider = { values = ONSALE_INTERVALS,
+		format = function(v) return v >= 60 and (v / 60 .. " min") or (v .. " s") end },
+		label = "Pause between two searches",
+		help = "On Sale runs your searches one after another with this pause between them. Each search comes round "
+			.. "every (number of searches x pause)." },
+	{ key = "onSaleSound", label = "Sound on each new find",
+		help = "Plays a sound when On Sale finds something new. To hear it while the game is in the background, turn "
+			.. "on Blizzard's \"Sound in Background\" (Options > Audio)." },
+	{ key = "onSaleGlow", label = "Screen glow on each new find",
+		help = "A pulsing gold glow around the screen edges (Blizzard's low-health glow, in gold) after a new find, until "
+			.. "you move the mouse over the Auction House or the On Sale panel." },
 }
 
 local ROW_SPACING = 30
@@ -69,10 +101,17 @@ local function RowsUsed(option)
 	return (option.slider or option.choices) and SLIDER_ROWS or 1
 end
 
+-- Rows of the tallest column, and the number of columns.
 local function TotalRows()
-	local rows = 0
-	for _, option in ipairs(OPTIONS) do rows = rows + RowsUsed(option) end
-	return rows
+	local rows, tallest, columns = 0, 0, 1
+	for _, option in ipairs(OPTIONS) do
+		if option.column then
+			tallest, rows, columns = math.max(tallest, rows), 0, columns + 1
+		else
+			rows = rows + RowsUsed(option)
+		end
+	end
+	return math.max(tallest, rows), columns
 end
 
 local function DaysText(value)
@@ -202,11 +241,14 @@ end
 -- Builds one settings page (checkboxes, sliders and dropdowns) inside `page`, starting at (x, y) from its top left.
 local function BuildPage(page, x, y)
 	page.checkboxes, page.sliders, page.dropdowns = {}, {}, {}
-	local row = 0
+	local row, left = 0, x
 	for _, option in ipairs(OPTIONS) do
 		local rowY = y - row * ROW_SPACING
-		row = row + RowsUsed(option)
-		if option.title then
+		row = row + (option.column and 0 or RowsUsed(option))
+		x = left
+		if option.column then
+			left, row = left + COLUMN_WIDTH, 0
+		elseif option.title then
 			local heading = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 			heading:SetPoint("TOPLEFT", x + 4, rowY - 4)
 			heading:SetText(option.title)
@@ -300,8 +342,9 @@ local function CreateMacroButton(parent)
 end
 
 local function CreateWindowPage()
-	window = PC:CreateWindow("ProfitCraftSettings", UIParent, 360, 96 + TotalRows() * ROW_SPACING, "ProfitCraft Settings",
-		{ movable = true })
+	local rows, columns = TotalRows()
+	window = PC:CreateWindow("ProfitCraftSettings", UIParent, 20 + columns * COLUMN_WIDTH, 96 + rows * ROW_SPACING,
+		"ProfitCraft Settings", { movable = true })
 	local page = CreateFrame("Frame", nil, window.Inset)
 	page:SetAllPoints()
 	BuildPage(page, 8, -6)

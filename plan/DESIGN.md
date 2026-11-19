@@ -21,8 +21,9 @@ These follow from the problems found in ForeverProfit and CraftProfit; the full 
 | Milestone | Version | Contents | Price sources |
 |---|---|---|---|
 | 1 | 0.1 | "Version 0.1" and its alphas in `FEATURES.md`; next: alpha.4 with ProfitCraft's own disenchant estimate (section 12) | Auctionator only for AH and merchant prices (all testers have it installed and scan with it) |
-| 2 | 0.2 | "Version 0.2": money window (beta.0), own AH scan, own merchant recording, "most recent per item" price choice | Auctionator and our own data; works without Auctionator |
-| 3 | 0.3 | "Version 0.3" | Same |
+| 2 | 0.2 (final published 2026-11-19) | "Version 0.2": money window (beta.0), own AH scan, own merchant recording, "most recent per item" price choice, RapidFire | Auctionator and our own data; works without Auctionator |
+| 3 | 0.3 | "Version 0.3: On Sale" (watched searches, hit list) | Same; history source open |
+| 4 | 0.4 | "Version 0.4" (filters, hover breakdown, vendor comparison, crafted reagents, shopping list; was 0.3) | Same |
 
 Auctionator is listed as `## OptionalDeps: Auctionator`, not `## Dependencies`, so the structure is already standalone: price lookups go through one price module with one "source" per data provider, and milestone 2 adds sources without changing anything else. Without Auctionator, 0.1 loads normally, says once in chat that it has no price source, and the panel says so too.
 
@@ -50,6 +51,9 @@ All code shares one private namespace (`local addonName, PC = ...`). The only gl
 | `UI/Bags.lua` | Window | "D/E Bags": disenchantable items in the bags with disenchant / AH / merchant values |
 | `Scan.lua` | Data | AH scan data (0.2, section 9): follows Auctionator's scans or runs its own full scan (button on the AH window), keeps the snapshot of recipe items |
 | `UI/Rapid.lua` | Window | RapidFire (0.2-beta.3): "RapidFire" button on the AH window, watch list panel, live commodity searches, deal popup with the buy key, purchase with quote check (FEATURES.md "Watch list & quick buy") |
+| `History.lua` | Prices | 0.3: own price history per item and suffix, usual price, Auctionator fallback (section 13) |
+| `OnSale.lua` | Data | 0.3: watched searches (parse, run, pace), hit check, hit list upkeep (section 13) |
+| `UI/OnSale.lua` | Window | 0.3: On Sale button and panel (Hits, Searches), buy dialog (section 13) |
 | `UI/MoneyWindow.lua` | Window | Currencies bar (code name: money window): money and up to 5 tracked currencies, right-click menu (0.2) |
 | `UI/BagSpace.lua` | Window | Free bag slots split as (reagent\|normal) on the reagent bag or backpack button |
 | `UI/Settings.lua` | Window | The settings page, shown in our own window and in Blizzard's Options > AddOns |
@@ -119,6 +123,12 @@ ProfitCraftDB = {
     },
   },
   vendor = { [itemID] = 125 },   -- milestone 2: our own merchant buy prices (copper per item)
+  onSale = {            -- 0.3 (section 13); one list for the account
+    searches = { { name = "Mail 20-30 Knight", term = 'of the Knight;Armor/Mail;;;20;30;;;;;2;;;', on = true } },
+  },
+  history = {           -- 0.3 (section 13), per ruleset key
+    ["<ruleset key>"] = { ["<itemID>:<suffix>"] = { today = { day = 20411, [14] = 4200, ... }, days = { [20410] = 4300, ... } } },
+  },
 }
 ```
 
@@ -126,7 +136,7 @@ ProfitCraftDB = {
 - The settings checkbox for Blizzard's own free-bag-space option stores nothing here: it reads and writes Blizzard's game setting `displayFreeBagSlots` (section 7).
 - Forever has no classic realms: it has 4 rulesets, each a "megaserver" with its own data: Normal, PvP, Roleplay and Roleplay-PvP; all players of a ruleset share one AH (Sylice, 2026-11-13). Prices are kept per ruleset **and faction** (cross-faction AH assumed not shared until confirmed).
 - **Ruleset key** (milestone 2) = `GetRealmName()` with the instance number ("Realm 7") removed, plus the faction: "CAMWOW US2 Realm 7 PvE" + Alliance → `CAMWOW US2 PvE|Alliance`. Removing only "Realm <number>" merges characters on different instances of the same ruleset, while keeping the rest of the name means Roleplay and Roleplay-PvP (names unknown; Sylice's guess: "Roleplay" or "RP") can't collide with Normal or PvP. The raw realm name is stored with the data, so the key can be corrected later.
-- Size: the snapshot holds only recipe items and is replaced by every scan, so it doesn't grow; no history is kept (Auctionator's is used, section 9). Earlier plan (dropped 2026-11-17): own prices with a pruning rule.
+- Size: the snapshot holds only recipe items and is replaced by every scan, so it doesn't grow. From 0.3 our own history is kept (section 13: 14 days, estimated 1-3 MB; check after a week). Until 0.3 no history was kept (Auctionator's was used, section 9). Earlier plan (dropped 2026-11-17): own prices with a pruning rule.
 - Recipe data is not saved: it is read live when the profession window opens.
 
 ## 7. Windows
@@ -216,7 +226,7 @@ All windows use Blizzard's current templates (all present in the Forever source)
 - **Not saved:** everything else. Each listing is checked once against the item's usual price (On Sale) and then dropped.
 - Scale (Sylice's data, 2026-11-17): a full scan covers about 6,500 different items (Auctionator: 7,073 items, 1 MB); recipe items only, CraftProfit: 87 items' ladders, 18.5 KB.
 
-**History** (with Auctionator only): `Auctionator.Database:GetPriceHistory(dbKey)` (per day: lowest price, highest of the daily lows, quantity) and `GetMeanPrice(dbKey, days)` (Auctionator 346, `Source/Database/Mixin.lua:155`, `205`), internal, so wrapped like the hooks. 21 days by default (Auctionator option). Used for 3-/7-day averages, trend and the On Sale "usual price". Random-suffix items: Auctionator's database key must separate suffixes for this to be fair; check how it keys Forever items before relying on it.
+**History** (with Auctionator only): `Auctionator.Database:GetPriceHistory(dbKey)` (per day: lowest price, highest of the daily lows, quantity) and `GetMeanPrice(dbKey, days)` (Auctionator 346, `Source/Database/Mixin.lua:155`, `205`), internal, so wrapped like the hooks. 21 days by default (Auctionator option). Used for 3-/7-day averages, trend and the On Sale "usual price". Random-suffix items: **checked 2026-11-19, it does not separate them on Forever** (all keys are plain item IDs; suffix keys only for Classic's old AH, `Source/Utilities/DBKeyFromLink.lua`). From 0.3 our own history is the main source and Auctionator's only a fallback (section 13).
 
 **Prices from the snapshot** (both rules fall back to Auctionator's lowest price, or none, when there's no detailed scan):
 - Reagent cost: needed quantity = recipe amount x crafts in the current mode (1, or enough for a full stack of the product); take price levels cheapest first until the quantity is covered; too few listed -> flagged "only N listed". Vendor price still wins when cheaper. Single units are counted: reagents can be bought by quantity (Sylice, 2026-11-17).
@@ -310,3 +320,63 @@ Typed in by us from public game facts; no code copied from Auctionator (All Righ
 ### Later
 - Confirm the odds with real disenchants (quick check: a green weapon of item level 21-30).
 - Possibly learn from the player's own disenchants (switch to own odds after enough samples, as ForeverForge Auction and Forever Simple Market do).
+
+## 13. On Sale (0.3; decided and built 2026-11-19; published as 0.3-beta.0, not yet seen in game)
+
+Files: `History.lua`, `OnSale.lua`, `UI/OnSale.lua`; `Scan.lua` hands every listing of other sellers to On Sale (an error there switches On Sale off for that scan only, so the snapshot is never affected). Tests: 66 checks in the harness (286 in all, 15 without Auctionator).
+
+**Alerts on a new find:** sound (`SOUNDKIT.RAID_WARNING`), `FlashClientIcon()` (Blizzard's PvP queue / ready check use it), and a gold screen glow: a full-screen frame (strata FULLSCREEN, no mouse) with Blizzard's low-health texture `Interface\FullScreenTextures\LowHealth` (additive, `Blizzard_FrameXML/Mainline/LowHealthFrame.xml`) tinted gold, pulsing until the mouse is over the AH window, the On Sale panel or the buy dialog, or the finds are gone, or the AH closes. Settings `onSaleSound`, `onSaleGlow`.
+
+What and why: `FEATURES.md` "Version 0.3". Goal: a character waits at the AH with the game in the background; ProfitCraft runs Sylice's searches on its own, plays a sound on a find, and Sylice buys with two clicks. Works without Auctionator.
+
+### Searches
+
+- **Stored as Auctionator's text format**, one string per search: `text;category;minItemLevel;maxItemLevel;minLevel;maxLevel;minCraftedLevel;maxCraftedLevel;minPrice;maxPrice;quality;tier;expansion;quantity` (field order from Auctionator 346 `Source/Search/Advanced.lua` `SplitAdvancedSearch`; divider `;`, `Source/Constants/Main.lua:9`); text in double quotes = exact match. ProfitCraft parses it with its own code (a data format, not copied code). Fields ProfitCraft doesn't use (crafted level, tier, expansion, quantity) are kept so a pasted search round-trips unchanged.
+- **Categories** are Blizzard's: `category` is the path of names in Blizzard's global `AuctionCategories` joined with `/` (e.g. "Armor/Mail"), each category carrying its own `filters` (class, subclass, inventory type). This is how Auctionator resolves them too (`Source/Search/Categories.lua`); Forever defines the table in `Blizzard_AuctionHouseUI/Camelot/Blizzard_AuctionData.lua`. Category names are the client's language (English for all testers).
+- **Paste in:** one search per line, or Auctionator's list export `ListName^search1^search2` (`Source/Shopping/ImportExport.lua`); the list name becomes a group label. Also the future outside tool's output (FEATURES.md "Side project").
+- **Editor:** name, text + "exact" box, category dropdown (from `AuctionCategories`), level min/max, item level min/max, quality (minimum), on/off.
+- **Running a search:** `C_AuctionHouse.SendBrowseQuery{ searchString, sorts, minLevel, maxLevel, filters = quality filters, itemClassFilters = the category's filters }` (Forever API docs, `AuctionHouseBrowseQuery`); more pages with `RequestMoreBrowseResults` until `HasFullBrowseResults()`. Results (`BrowseResultInfo`): `itemKey` (itemID, itemLevel, itemSuffix), `minPrice`, `totalQuantity`, `containsOwnerItem`. Item level and exact-name checks are done by ProfitCraft on the results (as Auctionator does; names from `C_AuctionHouse.GetItemKeyInfo`).
+- **Pace:** one AH request at a time, at most one a second (Blizzard's limit is 100 searches a minute, Forever API docs). **RapidFire and On Sale never run together**: starting one stops the other (both drive the AH's single current search; built 2026-11-19 instead of sharing the pace). Each page counts as a request until known otherwise. Interval setting = pause between two searches (default 10 s); each search comes round every (number of active searches x interval). Shown in the status line ("5 searches, each every 50 s").
+- **Pause** while the buy dialog is open, and for 30 s after anyone else's AH search: `hooksecurefunc` on `C_AuctionHouse.SendBrowseQuery`, `SendSearchQuery`, `SearchForItemKeys`, `SearchForFavorites`, `SendSellSearchQuery`; ProfitCraft's own calls are marked (`OnSale.Send`) so they don't count. This catches Blizzard's window and Auctionator alike. The request in flight is dropped (its answer would mix with theirs).
+- **Quality** is read as "this or better" (Sylice: "Uncommon or better"); Auctionator reads its quality field as exactly that quality.
+- **Stackable or gear** while the item data isn't cached (`C_Item.IsItemDataCachedByID`): weapons and armor (`GetItemInfoInstant` class 2/4) count as gear, everything else as stackable, so a full scan requests no item data.
+
+### History (own, per item and suffix)
+
+- **Key:** `itemID:suffix` (ItemKey's `itemSuffix`, 0 when none) per ruleset key (section 6). Item level is left out of the key: on Forever an item ID has one item level unless scaled; to revisit if results show several levels per item ID.
+- **Samples:** each time ProfitCraft sees an item's cheapest price from other sellers (a browse result, or the lowest buyout per unit of that key in a full scan), it keeps it as that hour's sample (first sample per hour per key). Own listings: a browse row with `containsOwnerItem` is skipped for history (its minimum may be ours); full scans skip own listings as in section 9.
+- **Daily price** = the median of that day's hourly samples. Using the lowest price of the day instead would follow every short-lived cheap listing that bots snap up, and a watch that searches every minute sees far more of those than a scan every few hours (Auctionator's daily low comes from scans), so the usual price would drift down.
+- **Usual price** = the median of the last 7 daily prices, once there are at least 3 days. Kept: 14 days; a key not seen for 14 days is dropped.
+- **Fallback while ours has < 3 days:** Auctionator's history (`Auctionator.Database:GetPriceHistory` / `GetMeanPrice`, internal, wrapped as in section 9) for stackable goods and for gear without a random suffix. Gear with a suffix: no usual price, no alert. Suffix known from `itemSuffix` (browse) or the item link (full scan).
+- **Size:** today's hourly samples (<= 24 per key) plus one number per past day. A full scan covers about 6,500 items (section 9), more keys with suffixes; estimated 1-3 MB of saved data at 14 days. Check the real size after a week of use; if too big, keep history only for items matched by a search or recipe.
+
+### Hits
+
+- **Check:** a result is a hit when its price is at or under the usual price x (1 - discount) (gear 65%, reagents 40%, sliders) **and** the profit (usual price x (1 - AH cut) - price) is at least the minimum profit (default 50s).
+- **Stackable goods** (browse rows show only the cheapest price): a candidate gets one item search (`SendSearchQuery`) to count the units at or under the On Sale price; the crumb limit (section 9) applies, so 100 cheap units among 50,000 never alert.
+- **Full scans:** every listing is checked in memory while the scan is read (section 9); hits join the same list.
+- **Hit list rows:** icon, name with suffix, price, usual price, profit, quantity (stackable), age ("12 s ago"), source (search name or "full scan"). Newest on top. Sound and taskbar flash only for new hits.
+- **Self-maintaining:** each run of a search updates or removes its hits (gone, or price now above the On Sale price). Full-scan hits not covered by any search are re-checked in batches with `C_AuctionHouse.SearchForItemKeys(itemKeys, sorts)` (one request for many keys; whether it counts as one search: to check).
+- **Buying:** click a row -> item search for that key (`SendSearchQuery`; gear results via `GetItemSearchResultInfo`: auctionID, buyoutAmount, owners) -> dialog "Buy N for X? (usual Y, profit Z)" -> click **Buy**: gear `C_AuctionHouse.PlaceBid(auctionID, buyoutAmount)`, stackable goods RapidFire's `StartCommoditiesPurchase` path with the quote check. Both are restricted (Forever API docs, `HasRestrictions`), so the call is the **first thing in the click** (knowledge file). The keep-at-least balance from RapidFire applies.
+
+### Settings ("On Sale" area)
+
+A second column of the settings window (`{ column = true }` in the option list; window width grows per column): gear discount (50-90%, default 65%), reagent discount (40-75%, default 40%), minimum profit (none, 10s, 25s, 50s (default), 1g, 2.5g, 5g, 10g), pause between searches (5 s, 10 s (default), 15 s, 30 s, 1 min, 2 min), sound on/off. Searches and the finds are in the On Sale panel. The buy dialog uses RapidFire's "keep at least" money.
+
+### UI
+
+An **"On Sale"** button on the AH window left of RapidFire's ("On Sale (3)" with finds) opens the On Sale panel at the AH window's right edge (one of the two panels at a time): pages **Finds** (newest first, mouse wheel scrolls; hover for details, click to buy) and **Searches** (on/off, Edit, x, New search, Paste searches), Start/Stop and a status line at the bottom. The editor's category menu is Blizzard's category tree, each submenu starting with "All <category>". Not running when the AH opens; stops when it closes, and the finds are cleared then.
+
+### To check in game
+
+- [ ] Browse search with category and level filters works as documented; whether each `RequestMoreBrowseResults` page counts toward the 100-a-minute limit.
+- [ ] Browse results carry `itemSuffix` for random-suffix gear (one row per suffix), and `GetItemKeyInfo(itemKey).itemName` includes the suffix.
+- [ ] How a suffix appears in a Forever item link (to match full-scan listings with browse keys).
+- [ ] Server text search matches suffixes ("of the Knight" in Blizzard's search box; FEATURES.md).
+- [ ] Idle logout while the watch runs (FEATURES.md).
+- [ ] `FlashClientIcon` under Wine (Sylice expects it not to work).
+- [ ] The gold glow shows (the low-health texture exists in Forever's client) and stops when the mouse reaches the AH window.
+- [ ] `SearchForItemKeys` (re-check of full-scan finds) answers with the browse events (assumed: Blizzard's favourites search, `SearchForFavorites`, fills the browse list the same way). If not, those finds simply stay until the AH closes; clicking one still checks the live listings.
+- [ ] Blizzard's own AH window doesn't send searches by itself while On Sale runs (that would show as "paused: someone else searched" without you searching).
+- [ ] Full-scan finds of gear: the item key built from the link's suffix and `GetDetailedItemLevelInfo` finds the listings when clicked.
+- [ ] Button and panel placement on the AH window.

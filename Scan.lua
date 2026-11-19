@@ -1,7 +1,8 @@
 -- ProfitCraft: AH scan data (DESIGN.md section 9)
 -- Reads full AH scans (C_AuctionHouse.ReplicateItems) and keeps a small snapshot: for the reagents and products
 -- of every recipe seen on the account, the cheapest price levels {price per unit, quantity} plus the total units
--- listed, without the player's own listings. Replaced by every scan; no history (Auctionator's is used).
+-- listed, without the player's own listings. Replaced by every scan. Every listing of other sellers also goes to On
+-- Sale (OnSale.lua: price history per item and suffix, finds), 0.3.
 -- * With Auctionator: ProfitCraft never scans. It hooks Auctionator's two scan routines (internal, Auctionator
 --   346/347: AuctionatorFullScanFrameMixin / AuctionatorIncrementalScanFrameMixin :InitiateScan). A full
 --   ("replicate") scan is read along when the game delivers it; a summary scan only gets a chat notice.
@@ -98,19 +99,21 @@ local function Finish()
 	end
 	PC:Send("PRICES_CHANGED")
 	PC:Send("SCAN_CHANGED")
+	if r.collector and not r.collector.failed then PC:Call("On Sale scan", r.collector.Finish, r.collector) end
 end
 
 -- Adds one listing (index into the game's scan list) to the snapshot being built. A listing of a recipe item that
 -- the game delivers incomplete (hasAllInfo false) is read again once its item data has loaded, as Auctionator
 -- does (Source_ModernAH/FullScan/Mixins/Frame.lua, ProcessBatch); everything else is used right away.
 local function ReadListing(r, index, retry)
-	local _, _, count, _, _, _, _, _, _, buyout, _, _, _, owner, ownerFull, _, itemID, hasAllInfo =
+	local name, _, count, _, _, _, _, _, _, buyout, _, _, _, owner, ownerFull, _, itemID, hasAllInfo =
 		C_AuctionHouse.GetReplicateItemInfo(index)
 	if r.first and ((owner and owner:find(r.first, 1, true)) or (ownerFull and ownerFull:find(r.first, 1, true))) then
 		r.ownForms[ownerFull or owner] = true
 	end
-	if not (itemID and r.wanted[itemID]) then return end
-	if not hasAllInfo and not retry then
+	if not itemID then return end
+	local wanted = r.wanted[itemID]
+	if wanted and not hasAllInfo and not retry then
 		r.pending[index] = itemID
 		r.pendingCount = r.pendingCount + 1
 		C_Item.RequestLoadItemDataByID(itemID)
@@ -118,10 +121,19 @@ local function ReadListing(r, index, retry)
 	end
 	if not (buyout and buyout > 0 and count and count > 0) then return end
 	if (owner and r.own[owner]) or (ownerFull and r.own[ownerFull]) then
-		r.ownSkipped = r.ownSkipped + 1
+		if wanted then r.ownSkipped = r.ownSkipped + 1 end
 		return
 	end
 	local price = math.floor(buyout / count + 0.5)
+	-- On Sale must never break the scan: its first error switches it off for this scan (and is logged).
+	if r.collector and not r.collector.failed then
+		local ok, err = pcall(r.collector.Add, r.collector, index, itemID, price, count, name)
+		if not ok then
+			r.collector.failed = true
+			PC:ReportError("On Sale scan", err)
+		end
+	end
+	if not wanted then return end
 	local byPrice = r.items[itemID]
 	if not byPrice then
 		byPrice = {}
@@ -183,6 +195,7 @@ PC:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE", function()
 	reading.own, reading.first = own, first
 	reading.items, reading.ownForms, reading.ownSkipped = {}, {}, 0
 	reading.pending, reading.pendingCount = {}, 0
+	reading.collector = PC.OnSale and PC.OnSale:NewScanCollector()
 	ReadBatch()
 end)
 

@@ -15,6 +15,12 @@ local DEFAULT_SETTINGS = {
 	staleDays = 2,        -- side panel warns when AH prices are this many days old; 0 = off
 	moneyWindow = false,  -- currencies bar shown (UI/MoneyWindow.lua)
 	crumbPercent = 1,     -- stackable items: price levels under this % of all units listed are ignored (Prices.lua)
+	onSaleGear = 65,      -- On Sale: gear is on sale this many % below its usual price (OnSale.lua)
+	onSaleReagent = 40,   -- On Sale: stackable goods, % below the usual price
+	onSaleMinProfit = 5000, -- On Sale: a find must earn at least this much (copper) after the AH cut
+	onSaleInterval = 10,  -- On Sale: seconds between two searches
+	onSaleSound = true,   -- On Sale: sound on each new find
+	onSaleGlow = true,    -- On Sale: screen glow on a new find until the mouse is over the AH or the On Sale panel
 }
 
 -- upgrades[n] turns a version n-1 database into version n.
@@ -66,6 +72,13 @@ PC:RegisterEvent("ADDON_LOADED", function(name)
 	rapidFire.key = rapidFire.key or "SPACE"
 	rapidFire.tolerance = rapidFire.tolerance or 0  -- % above the max a purchase may cost on average if the price moved
 	db.rapidFire = rapidFire
+	-- On Sale (OnSale.lua, DESIGN.md section 13), account-wide: the searches { id, name, term, on } (term in Auctionator's
+	-- text format) and the next search id. Price history per ruleset key (History.lua).
+	local onSale = type(db.onSale) == "table" and db.onSale or {}
+	onSale.searches = type(onSale.searches) == "table" and onSale.searches or {}
+	onSale.nextID = onSale.nextID or 1
+	db.onSale = onSale
+	db.history = type(db.history) == "table" and db.history or {}
 	ProfitCraftDB = db
 	PC.db = db
 	PC:Send("DATA_READY")

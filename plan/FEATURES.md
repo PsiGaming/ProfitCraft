@@ -76,6 +76,8 @@ All testers (Sylice and friends) have Auctionator installed and scan with it (de
 
 ## Version 0.2 (profit works without Auctionator; history and on-sale need it)
 
+**Closed: final `0.2` published 2026-11-19** (same code as 0.2-beta.10, used by Sylice for several days; made a normal GitHub release, not a pre-release, at Sylice's request; Sylice, 2026-11-19).
+
 From 0.2 on there are no alphas: each beta adds features, rc = done, fixes only (Sylice, 2026-11-17).
 
 - [x] **Money window** (0.2-beta.0; Sylice, 2026-11-17): a small movable window with your money and up to **5** tracked currencies (ProfitCraft's own limit; Blizzard's backpack tracking has no fixed limit on Forever, it fits as many as the backpack is wide), growing to the left as currencies are added. Off by default (settings checkbox, `/pcraft money`). Right-click anywhere: Add currency (pop-out list of the character's currencies), Remove currency, Lock/Unlock position, Background colour (any colour, fully transparent to solid), Hide. One list for all characters. Design: DESIGN.md "Money window".
@@ -136,10 +138,10 @@ Changes after Sylice's first test (2026-11-17, released as 0.2-beta.4):
 
 ## Requirements (apply to every version)
 
-- **Works without Auctionator** for prices and profit (from 0.2 on); **price history, trends and On Sale need Auctionator** (Sylice, 2026-11-17: its history is used instead of keeping our own). Earlier wording: works fully without Auctionator (from 0.2 on; disenchant estimates use ProfitCraft's own table from alpha.4 but still need Auctionator's AH prices until 0.2; 0.1 only loads cleanly without it and says it has no price source). ProfitCraft is a standalone addon; Auctionator is an optional, recommended source (`## OptionalDeps: Auctionator` in the `.toc`, so it loads first when installed, never `## Dependencies`). Auctionator's data is used when available. (Decided 2026-11-13.)
+- **Works without Auctionator** for prices and profit (from 0.2 on), and for On Sale from 0.3 on (own searches and own history, Sylice 2026-11-19). Until 0.3: price history, trends and On Sale needed Auctionator (Sylice, 2026-11-17). Earlier wording: works fully without Auctionator (from 0.2 on; disenchant estimates use ProfitCraft's own table from alpha.4 but still need Auctionator's AH prices until 0.2; 0.1 only loads cleanly without it and says it has no price source). ProfitCraft is a standalone addon; Auctionator is an optional, recommended source (`## OptionalDeps: Auctionator` in the `.toc`, so it loads first when installed, never `## Dependencies`). Auctionator's data is used when available. (Decided 2026-11-13.)
 - **Closing the settings must not open the game menu.** ProfitCraft's own commands and buttons open its own settings window, never Blizzard's settings panel (decided 2026-11-13). The same settings page is also listed in Blizzard's Options > AddOns, for people who look there; closing that one returns to the game menu, which is where they came from. Cause: Blizzard's settings panel always reopens the game menu when it is closed (Forever UI source, `SettingsPanelMixin:TransitionBackOpeningPanel` → `ToggleGameMenu()`, called by both the Close button and Escape).
 
-## Version 0.3
+## Version 0.4 (was 0.3 until 2026-11-19; moved for On Sale, Sylice)
 
 - [x] "Profitable only" filter, search box, and filter by profession.
 - [x] Hover breakdown for a recipe: cost, AH cut, net profit, stack net profit
@@ -168,18 +170,40 @@ Changes after Sylice's first test (2026-11-17, released as 0.2-beta.4):
   - **APIs present in Forever's UI source** (checked 2026-11-14): `C_ChatInfo.InChatMessagingLockdown`, `C_FriendList.GetFriendInfo` / `GetFriendInfoByIndex`, `C_BattleNet.GetFriendGameAccountInfo`, `C_BattleNet.SendGameData` (Battle.net friends; the old `BNSendGameData` is only a deprecated wrapper on Forever, `Blizzard_DeprecatedBattleNet/Deprecated_BattleNet.lua`), `Ambiguate`. Presence in the source is not proof they behave as on Retail.
   - **Sender names:** Retail sends "Name-Realm"; Forever characters have first and last names, so the format of `sender` and of friends-list names must be checked in game before any friends/Custom matching.
 
-## "On Sale" detector (possibly 0.4; Sylice, 2026-11-14)
+## Version 0.3: "On Sale" (Sylice, 2026-11-19; was "possibly 0.4")
+
+Goal (Sylice, 2026-11-19): RapidFire works but needs constant speed and attention, and others (people or bots) take cheap cloth within seconds. Instead: a character stands at the AH with the game in the background; ProfitCraft keeps checking broad searches and plays a sound on a find; Sylice switches to the game and decides.
+
+**Published as `0.3-beta.0` on 2026-11-19** (GitHub pre-release, zip `ProfitCraft-0.3-beta.0-forever.zip`). Everything below is in it. `v0.2` was left a normal release on purpose (Sylice: test whether WowUp offers the pre-release anyway; WowUp's source says it won't on the Stable channel); it goes back to pre-release after that test.
+
+Decided 2026-11-19 (Sylice): On Sale gets **its own searches and its own price history**, so it works without Auctionator and keeps random suffixes apart. Searches by name and suffix are expected to be one of ProfitCraft's best profit features (Sylice). Design: DESIGN.md section 13.
+
+- [x] **Watched searches, not single items:** like Auctionator's advanced search: text (partial, or exact in quotes), category, level range, item level range, quality; e.g. Armor > Mail, level 20-30, Uncommon, text "of the Knight". All categories (gear, trade goods, recipes, ...). Each search has a name and an on/off box. One list for the account.
+  - **Own editor** in ProfitCraft, plus **paste in** Auctionator searches: one search per line, or a whole exported list (`ListName^search^search`). The text format is Auctionator's (`text;category;...`); ProfitCraft reads it with its own code, and its categories are Blizzard's own (`AuctionCategories`), so no Auctionator code is used. Works without Auctionator.
+- [x] **Own price history per item and suffix** (Sylice, 2026-11-19), recorded from **0.3-beta.0** on, because it needs days of data before it can be trusted: Auctionator keeps one history per item ID (all 7,096 keys in `data/savedvariables/Auctionator-20261117-1448.lua`; its code makes suffix keys only for Classic's old AH, `Source/Utilities/DBKeyFromLink.lua`), so "of the Knight" and "of the Monkey" share one history there, which both misses deals and raises false alerts.
+  - Recorded from everything ProfitCraft sees anyway: its watched searches and full scans. No extra searches.
+  - **Usual price** = the median of the last 7 daily prices, once an item (and suffix) has **at least 3 days**. Until then: Auctionator's history for stackable goods and gear without random suffixes; **suffixed gear waits** (no alert) until our own history has 3 days.
+- [x] **Two deal sources** into one hit list: the watched searches (continuous, while the AH is open and the watch is started) and full scans (Auctionator's detailed scan, or ProfitCraft's own Scan button without Auctionator; at most every 15 minutes).
+- [x] **Hit list** at the side of the AH window instead of RapidFire's Space popup (Sylice, 2026-11-19): newest find on top, with item, price, usual price, possible profit; **click a row** -> ProfitCraft fetches that item's listings and asks "Buy N for X?"; **click Buy** -> purchase, made inside that click (knowledge file). The list maintains itself: a hit is removed when it is gone or no longer at or under the On Sale price.
+- [x] **Alert:** a sound on each new hit (setting on/off); a **gold screen glow** (Blizzard's low-health glow, tinted gold) that pulses until the mouse is over the AH window or the On Sale panel (setting on/off; Sylice, 2026-11-19: the taskbar flash likely won't work under Wine); and the taskbar flash (`FlashClientIcon`: Blizzard uses it for PvP queue pops and ready checks, `Blizzard_LFGUtil/Mainline/PVPHelper.lua`; whether it reaches the desktop under Wine is for Sylice to test). Needs Blizzard's "Sound in Background" on (Options > Audio; CVar `Sound_EnableSoundWhenGameIsInBG`, Forever settings source); ProfitCraft says so when the watch starts and it is off.
+- [x] **Thresholds** (Sylice, 2026-11-19): gear 65% below the usual price, reagents 40% below (the sliders below), and a **minimum profit of 50s** per hit (setting) so cheap items don't keep alerting. Profit = usual price after the AH cut, minus the price.
+- Without Auctionator, On Sale works fully once our own history has 3 days (replaces the 2026-11-17 decision "without Auctionator there is no history, so no On Sale").
+- To check in game (Sylice; not blocking the build):
+  - **Idle logout:** WoW usually logs out after 30 minutes without input (Blizzard forum citing Wowpedia; nothing Forever-specific found). Whether addon searches count as activity is unknown: leave RapidFire running untouched for 35 minutes. Nothing will be built to fake input (ToS).
+  - **Suffix text search:** type "of the Knight" in Blizzard's own AH search box; Auctionator passes the text to the server unchanged (`Source_ModernAH/Search/Mixins/DirectSearchProviderMixin.lua`), so whether suffixes match is the server's behaviour. If not, ProfitCraft searches the category without text and matches the names itself.
+
+### Earlier On Sale notes (2026-11-14 / 11-17)
 
 - [ ] **On Sale settings: an area of its own in the settings** (Sylice, 2026-11-17), with sliders. "Usual price" = Auctionator's 7-day average of daily lows; the discount is how far below it a listing must be:
   - **BoE gear discount:** 50-90% in 5% steps, default **65%** (on sale at 35% of the usual price or less).
   - **Reagent discount:** 40-75%, default **40%** (on sale at 60% of the usual price or less); 5% steps assumed.
   - Reagents also need a real share of the supply to be cheap (the crumb limit above), so a stack of 100 among 50,000 never alerts.
 - [ ] **Spot listings far below their usual price** while ProfitCraft reads a detailed scan (Auctionator's, or its own without Auctionator; every listing is checked in memory, only the hits are saved, so dropped BoE greens are found too), e.g. level 20-30 mail "of the Knight" that usually sells for 1g+ listed at 10-20s, and list them in a separate **"On Sale" window** with the possible profit (usual price after the AH cut, minus the listing price).
-- [ ] **Reagents on sale too** (Sylice, 2026-11-17): the same check for reagents, e.g. a usual price of 1s 75c and listings now at 1s 25c or less = "buy reagents now". Needs the same price history (3- and 7-day averages, trend up/down), so one design for both: **Auctionator's history** (decided 2026-11-17, see Version 0.2). Usual price for an item = from Auctionator's daily lows; what counts as "on sale" (e.g. how far below) is decided when building.
+- [ ] **Reagents on sale too** (Sylice, 2026-11-17): the same check for reagents, e.g. a usual price of 1s 75c and listings now at 1s 25c or less = "buy reagents now". Needs the same price history (3- and 7-day averages, trend up/down), so one design for both: **Auctionator's history** (decided 2026-11-17, see Version 0.2; **replaced 2026-11-19** by our own history per item and suffix, Auctionator only as a fallback). Usual price for an item = from Auctionator's daily lows; what counts as "on sale" (e.g. how far below) is decided when building.
 - Notes from the first look (2026-11-14):
   - **Addons can't download anything while the game runs**, so "known data sources" can only come in two ways: (1) a snapshot of outside averages shipped inside the addon (stale between releases; needs a Forever source and permission to use its data; foreverdb.net shows per-realm price history from player scans, terms not checked), or (2) **ProfitCraft's own price history** from its scans (the "Price history" item under Future), helped by price sharing. (2) is the realistic base; (1) only to fill gaps, if at all.
   - Needs **individual listings**: Auctionator's API gives one price per item; the listings come from reading a detailed scan (0.2).
-  - Without Auctionator there is no history, so no On Sale (decided 2026-11-17).
+  - Without Auctionator there is no history, so no On Sale (decided 2026-11-17; **replaced 2026-11-19**: our own history).
   - **Random suffixes** ("of the Knight", "of the Bear", ...) share one item ID but sell for different prices, so the history must be kept per item **and suffix**. Auctionator handles suffixes for Vanilla-type games (`Data_Vanilla/Suffixes.lua`); how suffixes appear in Forever's item links and AH results is not checked yet.
   - "Usual price" should be robust against bait listings and sparse data: e.g. the median of recent days, only when there are enough days/listings, and a minimum discount (e.g. 50% below) before an item counts as "on sale".
 
@@ -193,6 +217,10 @@ Changes after Sylice's first test (2026-11-17, released as 0.2-beta.4):
 - [ ] Profit tags in Blizzard's recipe list: a small profit number next to each recipe name in the list on the left, like CraftProfit's. Separate from the recipe-details profit (0.1) and the side panel.
 
 - [ ] **Listing deposit risk** (moved here 2026-11-13): show the listing deposit as money at risk if an item doesn't sell, per item and per stack, with the break-even quantity (e.g. "Cured Light Hide: 1 = −40c, stack of 20 = +9s, profitable from 3"). Left out of the main profit because the deposit is refunded on sale. Less relevant since Forever dropped the 1s minimum deposit (Sylice, 2026-11-17): the example above assumed it.
+
+## Side project (not planned; Sylice, 2026-11-19)
+
+- An outside tool (in `tools/`, not part of the addon) that reads Forever's AH snapshots from Blizzard's own Game Data API (per ruleset and faction house, hourly; community reports, not checked) to build price history and **suggest watch lists**, e.g. in Auctionator's shopping-list import format (`ListName^search1^search2`). Undermine Exchange's API covers Retail only (its API page, 2026-11-19). Only mentioned, not planned.
 
 ## Future (set aside)
 
