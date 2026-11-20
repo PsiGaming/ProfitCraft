@@ -22,6 +22,7 @@ local DEFAULT_SETTINGS = {
   onSaleSound = true,   -- On Sale: sound on each new find
   onSaleGlow = true,    -- On Sale: screen glow on a new find until the mouse is over the AH or the On Sale panel
   scanWarning = true,   -- raid-warning style notice when Auctionator runs a summary scan; history notice after scans
+  ahTabSize = 24,       -- size (px) of the icons of ProfitCraft's tabs at the AH window (UI/AHTabs.lua), 24-44
 }
 
 -- upgrades[n] turns a version n-1 database into version n.

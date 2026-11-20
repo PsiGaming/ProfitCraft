@@ -12,6 +12,8 @@
 local _, PC = ...
 
 local CRUMB_VALUES = { 0.5, 1, 2, 3 }  -- % of all units listed
+local TAB_SIZES = {}  -- 24 to 44 px in steps of 4; 44 is about Forever's own side tabs (Sylice, 2026-11-20)
+for size = 24, 44, 4 do TAB_SIZES[#TAB_SIZES + 1] = size end
 local GEAR_DISCOUNTS = { 50, 55, 60, 65, 70, 75, 80, 85, 90 }
 local REAGENT_DISCOUNTS = { 40, 45, 50, 55, 60, 65, 70, 75 }
 local MIN_PROFITS = { 0, 1000, 2500, 5000, 10000, 25000, 50000, 100000 }  -- copper
@@ -92,6 +94,11 @@ local OPTIONS = {
   { key = "onSaleGlow", label = "Screen glow on each new find",
     help = "A pulsing gold glow around the screen edges (Blizzard's low-health glow, in gold) after a new find, until "
       .. "you move the mouse over the Auction House or the On Sale panel." },
+  { divider = true },
+  { key = "ahTabSize", slider = { values = TAB_SIZES, format = function(v) return v .. " px" end },
+    label = "Size of the tabs at the Auction House",
+    help = "The RapidFire and On Sale tabs on the Auction House window's right edge. They stay stacked without "
+      .. "overlapping, and the panels open to their right." },
 }
 
 local ROW_SPACING = 30

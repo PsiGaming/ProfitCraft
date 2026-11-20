@@ -790,7 +790,7 @@ end
 
 local function CreatePanel()
   panel = PC:CreateWindow("ProfitCraftOnSale", AuctionHouseFrame, 440, 580, "ProfitCraft On Sale")
-  panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", PC.AHTabs.PANEL_OFFSET, 0)  -- right of the tabs
+  PC.AHTabs:Place(panel)  -- right of the tabs
   local inset = panel.Inset
 
   local content = CreateFrame("Frame", nil, inset)

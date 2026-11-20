@@ -831,7 +831,7 @@ end
 
 local function CreatePanel()
   panel = PC:CreateWindow("ProfitCraftRapidFire", AuctionHouseFrame, 440, 580, "ProfitCraft RapidFire")
-  panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", PC.AHTabs.PANEL_OFFSET, 0)  -- right of the tabs
+  PC.AHTabs:Place(panel)  -- right of the tabs
   local inset = panel.Inset
   inset:EnableMouse(true)
   inset:SetScript("OnReceiveDrag", function() PC:Call("rapidfire drop", AddFromCursor) end)
