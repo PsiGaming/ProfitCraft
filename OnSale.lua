@@ -344,12 +344,16 @@ end
 
 function OnSale:GetHit(key) return hits[key] end
 
--- Finds, newest first.
+-- Finds: newest first by the minute (a scan's finds all arrive at once), then the biggest profit first, unknown
+-- profit (fixed-price finds without history) last (Sylice, 2026-11-19).
 function OnSale:GetHits()
   local list = {}
   for _, hit in pairs(hits) do list[#list + 1] = hit end
   table.sort(list, function(a, b)
-    if a.found ~= b.found then return a.found > b.found end
+    local am, bm = math.floor(a.found / 60), math.floor(b.found / 60)
+    if am ~= bm then return am > bm end
+    if (a.profit ~= nil) ~= (b.profit ~= nil) then return a.profit ~= nil end
+    if a.profit and a.profit ~= b.profit then return a.profit > b.profit end
     return a.key < b.key
   end)
   return list
@@ -358,6 +362,16 @@ end
 local function ClearHits()
   wipe(hits)
   PC:Send("ONSALE_CHANGED")
+end
+
+-- The cheapest price of stackable goods that isn't a crumb (a level holding at least the crumb limit's share of all
+-- units listed; Prices.lua's rule). levels: { {price, units}, ... } in any order. nil when nothing is listed.
+function OnSale:Floor(levels, total)
+  table.sort(levels, function(a, b) return a[1] < b[1] end)
+  for _, level in ipairs(levels) do
+    if level[2] * 100 >= Settings().crumbPercent * total then return level[1] end
+  end
+  return levels[1] and levels[1][1]
 end
 
 -- More than this share of what's listed under the On Sale price = the market moved, not a sale (Sylice's first scan,
@@ -382,6 +396,7 @@ function OnSale:CheckStackable(itemID, levels, base)
       cheapest = cheapest and math.min(cheapest, level[1]) or level[1]
     end
   end
+  PC.History:Record(itemID, 0, OnSale:Floor(levels, total))
   local profit = Profit(limit, cheap, cost)
   -- A fixed price is taken as given; a percent rule ignores crumbs and a market that moved as a whole.
   local real = cheap > 0 and (limit.fixed
@@ -485,7 +500,11 @@ local function ReadBrowse(task)
         local hit = hits[key]
         local rule = search or (hit and OnSale:GetSearch(hit.from))
         local limit = OnSale:GetLimit(itemID, variant, rule)
-        if not row.containsOwnerItem then PC.History:Record(itemID, variant, row.minPrice) end
+        local candidate = limit and row.minPrice <= limit.limit and not row.containsOwnerItem
+        -- A stackable candidate's price is recorded after its unit check, without crumbs.
+        if not row.containsOwnerItem and not (candidate and limit.stackable) then
+          PC.History:Record(itemID, variant, row.minPrice)
+        end
         local from = search and search.id or (hit and hit.from) or "scan"
         if limit and row.minPrice <= limit.limit and not row.containsOwnerItem then
           if limit.stackable then
@@ -769,12 +788,13 @@ function Collector:Add(index, itemID, unitPrice, count, name)
   local key = itemID .. ":" .. variant
   local entry = self.keys[key]
   if not entry then
-    entry = { itemID = itemID, variant = variant, min = unitPrice, units = 0, listings = 0, cheap = 0,
+    entry = { itemID = itemID, variant = variant, min = unitPrice, units = 0, listings = 0, cheap = 0, levels = {},
       cheapListings = 0, cheapCost = 0, name = name, limit = OnSale:GetLimit(itemID, variant) or false }
     self.keys[key] = entry
   end
   entry.name = entry.name or name
   if unitPrice < entry.min then entry.min = unitPrice end
+  if not gear then entry.levels[unitPrice] = (entry.levels[unitPrice] or 0) + count end
   entry.units = entry.units + count
   entry.listings = entry.listings + 1
   if entry.limit and unitPrice <= entry.limit.limit then
@@ -789,7 +809,13 @@ end
 function Collector:Finish()
   local found = 0
   for key, entry in pairs(self.keys) do
-    PC.History:Record(entry.itemID, entry.variant, entry.min)
+    local price = entry.min
+    if next(entry.levels) then
+      local levels = {}
+      for levelPrice, units in pairs(entry.levels) do levels[#levels + 1] = { levelPrice, units } end
+      price = OnSale:Floor(levels, entry.units)
+    end
+    PC.History:Record(entry.itemID, entry.variant, price)
     local limit = entry.limit
     if limit and entry.cheap > 0 then
       local quantity, cost, real

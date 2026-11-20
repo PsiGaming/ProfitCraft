@@ -351,6 +351,17 @@ What and why: `FEATURES.md` "Version 0.3". Goal: a character waits at the AH wit
 - Tab and Shift-Tab between the editor's fields (hidden ones skipped); Searches is the left page button, Finds the right.
 - Tests: 303 checks + 15 without Auctionator.
 
+### Smarter usual price and sorting (released as `0.3.2`, 2026-11-20)
+
+Sylice: keep looking for deals across **all** items (full-scan finds stay for everything), but stop reporting prices that have simply come down (stacks of craftable potions), and sort the list. Rejected idea: comparing with "the current market" weighted by units listed (Sylice: 3000 Silk Cloth at 2s among 10,000 higher is the real price, not a sale; listings above it are just unsold).
+- **Usual price = the lower of the 7-day median and the median of the last 2 days** (today's so far included), for our own history and Auctionator's. A price that has come down and stays there is the new usual within about two days; one cheap hour among normal ones barely moves it.
+- **The recorded price of stackable goods is the floor without crumbs** (the cheapest level holding at least the crumb limit's share of all units; `OnSale:Floor`), from full scans and from the unit check of a candidate; a browse result that is a stackable candidate isn't recorded from its cheapest listing.
+- History was already floor-based (cheapest listing per hour, not an average), so listings far above the floor never raised the usual price.
+- **Sorting:** newest first by the minute (a scan's finds arrive together), then the biggest profit, unknown profit last.
+- **Scroll bars:** Finds and Searches are Blizzard scroll lists (`PC:CreateScrollList`, now with an optional area to fill) with a scroll bar, instead of fixed rows scrolled only by the mouse wheel (Sylice: to see how long the list is).
+- Not possible: knowing the price things **sell** at (the AH shows addons listings, not sales). Inferring sales from listings that disappear between checks would be a separate, bigger feature.
+- Tests: 309 checks + 15 without Auctionator.
+
 ### History (own, per item and variant)
 
 - **Key:** `itemID:variant` per ruleset key (section 6): variant 0, or for weapons and armour the full name in lower case (see the fixes above; was `itemID:suffix` in 0.3-beta.0). Item level is left out of the key: on Forever an item ID has one item level unless scaled; to revisit if results show several levels per item ID.

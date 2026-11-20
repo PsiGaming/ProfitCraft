@@ -1,6 +1,7 @@
 -- ProfitCraft: On Sale panel (FEATURES.md "Version 0.3", DESIGN.md section 13)
 -- An "On Sale" button on the AH window opens a panel at its right edge (in RapidFire's place; one at a time) with two
--- pages: Finds (newest first; click one to buy it) and Searches (on/off, edit, remove, new, paste). Start/Stop and
+-- pages: Searches (on/off, edit, remove, new, paste) and Finds (click one to buy it), both scroll lists with a scroll
+-- bar. Start/Stop and
 -- the status line at the bottom.
 -- Buying: clicking a find searches that item (C_AuctionHouse.SendSearchQuery) and the dialog offers what is still at
 -- or under the On Sale price; its Buy button makes the purchase call FIRST in the click (Forever blocks it otherwise,
@@ -13,15 +14,11 @@ local ADDON_NAME, PC = ...
 local OnSale = PC.OnSale
 
 local ROW_HEIGHT = 22
-local FIND_ROWS = 19
-local SEARCH_ROWS = 16
 local ANSWER_TIMEOUT = 5
 local RESULT_TIMEOUT = 10
 local CLOSE_DELAY = 1.5
 
 local panel, toggleButton, statusText, startButton, findsView, searchesView, editView, pasteView, findsHeader
-local findRows, searchRows = {}, {}
-local findOffset, searchOffset = 0, 0
 local editing  -- the search being edited (nil = new)
 local editState = {}
 local dialog, buyButton
@@ -334,75 +331,73 @@ function OnSale:GetBuyButton() return buyButton end
 
 local Refresh
 
-local function CreateFindRow(index, parent)
-  local row = CreateFrame("Button", nil, parent)
-  row:SetSize(416, ROW_HEIGHT)
-  row:SetPoint("TOPLEFT", 4, -24 - (index - 1) * ROW_HEIGHT)
-  local highlight = row:CreateTexture(nil, "HIGHLIGHT")
-  highlight:SetAllPoints()
-  highlight:SetColorTexture(1, 1, 1, 0.08)
-  row.icon = row:CreateTexture(nil, "ARTWORK")
-  row.icon:SetSize(16, 16)
-  row.icon:SetPoint("LEFT", 2, 0)
-  row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  row.name:SetSize(170, ROW_HEIGHT)
-  row.name:SetPoint("LEFT", 22, 0)
-  row.name:SetJustifyH("LEFT")
-  row.price = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  row.price:SetSize(100, ROW_HEIGHT)
-  row.price:SetPoint("LEFT", 194, 0)
-  row.price:SetJustifyH("RIGHT")
-  row.profit = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  row.profit:SetSize(80, ROW_HEIGHT)
-  row.profit:SetPoint("LEFT", 298, 0)
-  row.profit:SetJustifyH("RIGHT")
-  row.age = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  row.age:SetSize(34, ROW_HEIGHT)
-  row.age:SetPoint("LEFT", 380, 0)
-  row.age:SetJustifyH("RIGHT")
-  row:SetScript("OnClick", function(self)
-    if self.key then PC:Call("on sale buy", OnSale.Inspect, OnSale, self.key) end
-  end)
-  row:SetScript("OnEnter", function(self)
-    local hit = self.key and OnSale:GetHit(self.key)
-    if not hit then return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(hit.name or "?", 1, 1, 1)
-    GameTooltip:AddLine(string.format("%d for %s (cheapest %s)", hit.quantity, PC:FormatMoney(hit.cost),
-      PC:FormatMoney(hit.price)))
-    if hit.usual then
-      GameTooltip:AddLine("Usual price " .. PC:FormatMoney(hit.usual) .. " (" .. (hit.source == "own"
-        and "ProfitCraft's history" or "Auctionator's history") .. ")")
-      GameTooltip:AddLine("Profit after the AH cut " .. PC:FormatProfit(hit.profit))
-    else
-      GameTooltip:AddLine("Usual price not known yet")
-    end
-    if hit.fixed then GameTooltip:AddLine("At or under your price of " .. PC:FormatMoney(hit.limit)) end
-    GameTooltip:AddLine("Found by " .. SearchName(hit.from) .. ", " .. Ago(time() - hit.found) .. " ago", 0.7, 0.7, 0.7)
-    GameTooltip:AddLine("Click to buy", 0.3, 1, 0.3)
-    GameTooltip:Show()
-  end)
-  row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  return row
+local findsList, searchesList  -- Blizzard scroll lists (ScrollBox + scroll bar, PC:CreateScrollList)
+
+-- One row of the Finds list; the scroll list reuses rows, so the parts are made once per row.
+local function InitFindRow(row, hit)
+  if not row.created then
+    row.created = true
+    local highlight = row:CreateTexture(nil, "HIGHLIGHT")
+    highlight:SetAllPoints()
+    highlight:SetColorTexture(1, 1, 1, 0.08)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetSize(16, 16)
+    row.icon:SetPoint("LEFT", 2, 0)
+    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.name:SetSize(150, ROW_HEIGHT)
+    row.name:SetPoint("LEFT", 22, 0)
+    row.name:SetJustifyH("LEFT")
+    row.name:SetWordWrap(false)
+    row.price = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.price:SetSize(100, ROW_HEIGHT)
+    row.price:SetPoint("LEFT", 174, 0)
+    row.price:SetJustifyH("RIGHT")
+    row.profit = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.profit:SetSize(76, ROW_HEIGHT)
+    row.profit:SetPoint("LEFT", 278, 0)
+    row.profit:SetJustifyH("RIGHT")
+    row.age = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    row.age:SetSize(34, ROW_HEIGHT)
+    row.age:SetPoint("LEFT", 356, 0)
+    row.age:SetJustifyH("RIGHT")
+    row:SetScript("OnClick", function(self)
+      if self.key then PC:Call("on sale buy", OnSale.Inspect, OnSale, self.key) end
+    end)
+    row:SetScript("OnEnter", function(self)
+      local found = self.key and OnSale:GetHit(self.key)
+      if not found then return end
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(found.name or "?", 1, 1, 1)
+      GameTooltip:AddLine(string.format("%d for %s (cheapest %s)", found.quantity, PC:FormatMoney(found.cost),
+        PC:FormatMoney(found.price)))
+      if found.usual then
+        GameTooltip:AddLine("Usual price " .. PC:FormatMoney(found.usual) .. " (" .. (found.source == "own"
+          and "ProfitCraft's history" or "Auctionator's history") .. ")")
+        GameTooltip:AddLine("Profit after the AH cut " .. PC:FormatProfit(found.profit))
+      else
+        GameTooltip:AddLine("Usual price not known yet")
+      end
+      if found.fixed then GameTooltip:AddLine("At or under your price of " .. PC:FormatMoney(found.limit)) end
+      GameTooltip:AddLine("Found by " .. SearchName(found.from) .. ", " .. Ago(time() - found.found) .. " ago", 0.7, 0.7,
+        0.7)
+      GameTooltip:AddLine("Click to buy", 0.3, 1, 0.3)
+      GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  end
+  row.key = hit.key
+  row.icon:SetTexture(PC.Items:GetIcon(hit.itemID) or 134400)
+  row.name:SetText(hit.name or PC.Items:GetName(hit.itemID))
+  row.price:SetText((hit.quantity > 1 and (hit.quantity .. " x ") or "") .. PC:FormatMoney(hit.price))
+  row.profit:SetText(PC:FormatProfit(hit.profit))
+  row.age:SetText(Ago(time() - hit.found))
 end
 
 local function RefreshFinds()
   local list = OnSale:GetHits()
-  findOffset = math.max(0, math.min(findOffset, #list - FIND_ROWS))
   findsHeader:SetText(#list == 0 and "No finds yet." or (#list .. (#list == 1 and " find" or " finds")
     .. ", newest first - click one to buy it"))
-  for index = 1, FIND_ROWS do
-    local row, hit = findRows[index], list[findOffset + index]
-    row:SetShown(hit ~= nil)
-    if hit then
-      row.key = hit.key
-      row.icon:SetTexture(PC.Items:GetIcon(hit.itemID) or 134400)
-      row.name:SetText(hit.name or PC.Items:GetName(hit.itemID))
-      row.price:SetText((hit.quantity > 1 and (hit.quantity .. " x ") or "") .. PC:FormatMoney(hit.price))
-      row.profit:SetText(PC:FormatProfit(hit.profit))
-      row.age:SetText(Ago(time() - hit.found))
-    end
-  end
+  findsList:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
 end
 
 ---------------------------------------------------------------------------
@@ -411,65 +406,56 @@ end
 
 local ShowView
 
-local function CreateSearchRow(index, parent)
-  local row = CreateFrame("Frame", nil, parent)
-  row:SetSize(416, ROW_HEIGHT)
-  row:SetPoint("TOPLEFT", 4, -24 - (index - 1) * ROW_HEIGHT)
-  row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-  row.check:SetSize(20, 20)
-  row.check:SetPoint("LEFT")
-  row.check:SetScript("OnClick", function(self)
-    local search = row.search
-    if search then search.on = self:GetChecked() and true or false end
-    PC:Send("ONSALE_STATUS")
-  end)
-  row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  row.name:SetSize(300, ROW_HEIGHT)
-  row.name:SetPoint("LEFT", 24, 0)
-  row.name:SetJustifyH("LEFT")
-  row:EnableMouse(true)
-  row:SetScript("OnEnter", function(self)
-    if not self.search then return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(self.search.name, 1, 1, 1)
-    GameTooltip:AddLine(OnSale:Describe(self.search.term), nil, nil, nil, true)
-    GameTooltip:AddLine("Finds: " .. OnSale:DescribeRule(self.search), nil, nil, nil, true)
-    if self.search.group then GameTooltip:AddLine("From list: " .. self.search.group, 0.7, 0.7, 0.7) end
-    local _, why = OnSale:BuildQuery(self.search.term)
-    if why and next(select(2, OnSale:GetCategories())) then GameTooltip:AddLine("Can't run: " .. why, 1, 0.3, 0.3) end
-    GameTooltip:Show()
-  end)
-  row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  row.edit = Button(row, "Edit", 50)
-  row.edit:SetHeight(18)
-  row.edit:SetPoint("LEFT", 328, 0)
-  row.edit:SetScript("OnClick", function()
-    if row.search then
-      editing = row.search
-      ShowView("edit")
-    end
-  end)
-  row.remove = Button(row, "x", 22)
-  row.remove:SetHeight(18)
-  row.remove:SetPoint("LEFT", 382, 0)
-  row.remove:SetScript("OnClick", function()
-    if row.search then PC:Call("on sale remove", OnSale.RemoveSearch, OnSale, row.search.id) end
-  end)
-  return row
+local function InitSearchRow(row, search)
+  if not row.created then
+    row.created = true
+    row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+    row.check:SetSize(20, 20)
+    row.check:SetPoint("LEFT")
+    row.check:SetScript("OnClick", function(self)
+      if row.search then row.search.on = self:GetChecked() and true or false end
+      PC:Send("ONSALE_STATUS")
+    end)
+    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.name:SetSize(280, ROW_HEIGHT)
+    row.name:SetPoint("LEFT", 24, 0)
+    row.name:SetJustifyH("LEFT")
+    row.name:SetWordWrap(false)
+    row:SetScript("OnEnter", function(self)
+      if not self.search then return end
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(self.search.name, 1, 1, 1)
+      GameTooltip:AddLine(OnSale:Describe(self.search.term), nil, nil, nil, true)
+      GameTooltip:AddLine("Finds: " .. OnSale:DescribeRule(self.search), nil, nil, nil, true)
+      if self.search.group then GameTooltip:AddLine("From list: " .. self.search.group, 0.7, 0.7, 0.7) end
+      local _, why = OnSale:BuildQuery(self.search.term)
+      if why and next(select(2, OnSale:GetCategories())) then GameTooltip:AddLine("Can't run: " .. why, 1, 0.3, 0.3) end
+      GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row.edit = Button(row, "Edit", 50)
+    row.edit:SetHeight(18)
+    row.edit:SetPoint("LEFT", 306, 0)
+    row.edit:SetScript("OnClick", function()
+      if row.search then
+        editing = row.search
+        ShowView("edit")
+      end
+    end)
+    row.remove = Button(row, "x", 22)
+    row.remove:SetHeight(18)
+    row.remove:SetPoint("LEFT", 360, 0)
+    row.remove:SetScript("OnClick", function()
+      if row.search then PC:Call("on sale remove", OnSale.RemoveSearch, OnSale, row.search.id) end
+    end)
+  end
+  row.search = search
+  row.check:SetChecked(search.on)
+  row.name:SetText(search.name)
 end
 
 local function RefreshSearches()
-  local list = OnSale:GetSearches()
-  searchOffset = math.max(0, math.min(searchOffset, #list - SEARCH_ROWS))
-  for index = 1, SEARCH_ROWS do
-    local row, search = searchRows[index], list[searchOffset + index]
-    row.search = search
-    row:SetShown(search ~= nil)
-    if search then
-      row.check:SetChecked(search.on)
-      row.name:SetText(search.name)
-    end
-  end
+  searchesList:SetDataProvider(CreateDataProvider(OnSale:GetSearches()), ScrollBoxConstants.RetainScrollPosition)
 end
 
 ---------------------------------------------------------------------------
@@ -802,14 +788,6 @@ function Refresh()
   UpdateStatus()
 end
 
-local function Wheel(view, getOffset, setOffset)
-  view:EnableMouseWheel(true)
-  view:SetScript("OnMouseWheel", function(_, delta)
-    setOffset(math.max(0, getOffset() - delta))
-    Refresh()
-  end)
-end
-
 local function CreatePanel()
   panel = PC:CreateWindow("ProfitCraftOnSale", AuctionHouseFrame, 440, 580, "ProfitCraft On Sale")
   panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 2, 0)
@@ -828,14 +806,18 @@ local function CreatePanel()
   findsView = CreateFrame("Frame", nil, content)
   findsView:SetAllPoints()
   findsHeader = Label(findsView, "", 8, -6)
-  for index = 1, FIND_ROWS do findRows[index] = CreateFindRow(index, findsView) end
-  Wheel(findsView, function() return findOffset end, function(v) findOffset = v end)
+  local findsArea = CreateFrame("Frame", nil, findsView)
+  findsArea:SetPoint("TOPLEFT", 0, -20)
+  findsArea:SetPoint("BOTTOMRIGHT")
+  findsList = PC:CreateScrollList(findsView, ROW_HEIGHT, "on sale find row", InitFindRow, findsArea)
 
   searchesView = CreateFrame("Frame", nil, content)
   searchesView:SetAllPoints()
   Label(searchesView, "On: searched in turn while On Sale runs. Hover for details.", 8, -6)
-  for index = 1, SEARCH_ROWS do searchRows[index] = CreateSearchRow(index, searchesView) end
-  Wheel(searchesView, function() return searchOffset end, function(v) searchOffset = v end)
+  local searchesArea = CreateFrame("Frame", nil, searchesView)
+  searchesArea:SetPoint("TOPLEFT", 0, -20)
+  searchesArea:SetPoint("BOTTOMRIGHT", 0, 32)
+  searchesList = PC:CreateScrollList(searchesView, ROW_HEIGHT, "on sale search row", InitSearchRow, searchesArea)
   local new = Button(searchesView, "New search", 110)
   new:SetPoint("BOTTOMLEFT", 8, 6)
   new:SetScript("OnClick", function()

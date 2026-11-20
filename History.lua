@@ -5,7 +5,10 @@
 -- (OnSale:Variant: 0, or for weapons and armour the full item name, which includes a random suffix):
 -- * the first price seen in each hour of the day (the cheapest listing of other sellers at that moment);
 -- * at the end of a day, the median of that day's hourly prices becomes the day's price;
--- * usual price = median of the last 7 daily prices (today's so far included), once there are at least 3 days.
+-- * usual price = the lower of the median of the last 7 daily prices and the median of the last 2 (today's so far
+--   included), once there are at least 3 days. The 2-day part follows a price that has come down to a new regular
+--   level, so it stops counting as "on sale" within about two days (Sylice, 2026-11-19: potions that got cheaper were
+--   reported as deals); a single cheap listing barely moves it.
 -- Daily lows are not used: a search every minute sees every short-lived cheap listing, which would pull the usual
 -- price down. Kept 14 days, per ruleset key (Scan:RulesetKey).
 -- Until an item has 3 days: Auctionator's history (internal Auctionator.Database:GetPriceHistory, Auctionator 346
@@ -19,6 +22,7 @@ PC.History = History
 
 local KEEP_DAYS = 14
 local USUAL_DAYS = 7
+local RECENT_DAYS = 2
 local MIN_DAYS = 3
 local FALLBACK_CACHE_SECONDS = 600
 
@@ -115,19 +119,27 @@ end
 
 -- The usual price of an item (+ variant): copper, source ("own" or "Auctionator") and number of days used; nil when
 -- there's not enough history. allowFallback: Auctionator's history may fill in while ours has < 3 days.
+-- prices: daily prices, newest first. The lower of the week's median and the recent days' median.
+local function Usual(prices)
+  local week, recent = {}, {}
+  for i = 1, math.min(USUAL_DAYS, #prices) do week[i] = prices[i] end
+  for i = 1, math.min(RECENT_DAYS, #prices) do recent[i] = prices[i] end
+  return math.min(Median(week), Median(recent)), #week
+end
+
 function History:GetUsual(itemID, variant, allowFallback)
   local days = self:GetDays(itemID, variant)
   if #days >= MIN_DAYS then
     local prices = {}
-    for i = 1, math.min(USUAL_DAYS, #days) do prices[i] = days[i][2] end
-    return Median(prices), "own", #prices
+    for i, day in ipairs(days) do prices[i] = day[2] end
+    local usual, count = Usual(prices)
+    return usual, "own", count
   end
   if not allowFallback then return nil end
   local lows = AuctionatorDays(itemID)
   if lows and #lows >= MIN_DAYS then
-    local prices = {}
-    for i = 1, math.min(USUAL_DAYS, #lows) do prices[i] = lows[i] end
-    return Median(prices), "Auctionator", #prices
+    local usual, count = Usual({ unpack(lows) })
+    return usual, "Auctionator", count
   end
   return nil
 end

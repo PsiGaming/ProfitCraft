@@ -29,11 +29,13 @@ function PC:CreateWindow(name, parent, width, height, title, options)
   return frame
 end
 
--- A scrolling list (Blizzard's ScrollBox) filling the window's inset. initializer(row, data) draws one row.
-function PC:CreateScrollList(frame, rowHeight, where, initializer)
+-- A scrolling list (Blizzard's ScrollBox) with a scroll bar on its right, filling `area` (default: the window's inset).
+-- initializer(row, data) draws one row.
+function PC:CreateScrollList(frame, rowHeight, where, initializer, area)
+  area = area or frame.Inset
   local scrollBox = CreateFrame("Frame", nil, frame, "WowScrollBoxList")
-  scrollBox:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4, -4)
-  scrollBox:SetPoint("BOTTOMRIGHT", frame.Inset, "BOTTOMRIGHT", -18, 4)
+  scrollBox:SetPoint("TOPLEFT", area, "TOPLEFT", 4, -4)
+  scrollBox:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -18, 4)
   local scrollBar = CreateFrame("EventFrame", nil, frame, "MinimalScrollBar")
   scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 4, 0)
   scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 4, 0)
