@@ -782,7 +782,7 @@ local function UpdateStatus()
 end
 
 function Refresh()
-  PC.AHTabs:Update()  -- the number of finds on the tab and header button
+  PC.AHTabs:Update()  -- the number of finds on the tab
   if not (panel and panel:IsShown()) then return end
   if currentView == "finds" then RefreshFinds() elseif currentView == "searches" then RefreshSearches() end
   UpdateStatus()
@@ -790,7 +790,7 @@ end
 
 local function CreatePanel()
   panel = PC:CreateWindow("ProfitCraftOnSale", AuctionHouseFrame, 440, 580, "ProfitCraft On Sale")
-  panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 2, 0)
+  panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", PC.AHTabs.PANEL_OFFSET, 0)  -- right of the tabs
   local inset = panel.Inset
 
   local content = CreateFrame("Frame", nil, inset)
@@ -872,10 +872,7 @@ PC.AHTabs:Register({
   panel = function() return panel end,
   count = function() return #OnSale:GetHits() end,
   open = function()
-    if not panel then
-      CreatePanel()
-      PC.AHTabs:AddHeader(panel, "onsale")
-    end
+    if not panel then CreatePanel() end
     panel:Show()
     PC:Send("AH_PANEL_SHOWN", "onsale")
   end,

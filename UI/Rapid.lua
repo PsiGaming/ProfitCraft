@@ -831,7 +831,7 @@ end
 
 local function CreatePanel()
   panel = PC:CreateWindow("ProfitCraftRapidFire", AuctionHouseFrame, 440, 580, "ProfitCraft RapidFire")
-  panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 2, 0)
+  panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", PC.AHTabs.PANEL_OFFSET, 0)  -- right of the tabs
   local inset = panel.Inset
   inset:EnableMouse(true)
   inset:SetScript("OnReceiveDrag", function() PC:Call("rapidfire drop", AddFromCursor) end)
@@ -957,10 +957,7 @@ PC.AHTabs:Register({
   help = "Watch a few items closely and buy them at your price with one key.",
   panel = function() return panel end,
   open = function()
-    if not panel then
-      CreatePanel()
-      PC.AHTabs:AddHeader(panel, "rapidfire")
-    end
+    if not panel then CreatePanel() end
     panel:Show()
     PC:Send("AH_PANEL_SHOWN", "rapid")  -- one panel at the AH's edge at a time
   end,
