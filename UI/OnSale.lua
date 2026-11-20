@@ -87,8 +87,9 @@ local function ShowOffer()
   local offer, hit = state.offer, state.hit
   local net = hit.usual and hit.usual * (1 - Settings().ahCut)
   local profit = net and (net * offer.quantity - offer.total)
-  local usual = hit.usual and string.format("Usual %s each (%s)  -  profit after the AH cut %s", PC:FormatMoney(hit.usual),
-    hit.source == "own" and "ProfitCraft's history" or "Auctionator's history", PC:FormatProfit(profit))
+  local usual = hit.note or hit.usual and string.format("Usual %s each (%s)  -  profit after the AH cut %s",
+    PC:FormatMoney(hit.usual), hit.source == "own" and "ProfitCraft's history" or "Auctionator's history",
+    PC:FormatProfit(profit))
     or "Usual price not known yet"
   dialog.text:SetText(string.format("Buy %d for %s?", offer.quantity, PC:FormatMoney(offer.total)))
   dialog.note:SetText(string.format("%s\nYou keep %s (at least %s).", usual, PC:FormatMoney(GetMoney() - offer.total),
@@ -99,7 +100,7 @@ end
 local function Gone(message)
   local hit = inspecting and inspecting.hit
   if hit then OnSale:RemoveHit(hit.key) end
-  ShowMessage(message or "No longer on sale.", true)
+  ShowMessage(message or (hit and hit.goneText) or "No longer on sale.", true)
 end
 
 -- Listings of a stackable find: cheapest first, others' units at or under the On Sale price, as many as the budget pays.
@@ -192,7 +193,8 @@ local function Bought()
   local state = inspecting
   state.done = true
   local offer, hit = state.offer, state.hit
-  PC:Print(string.format("On Sale: bought %d %s for %s.", offer.quantity, hit.name or "?", PC:FormatMoney(offer.total)))
+  PC:Print(string.format("%s: bought %d %s for %s.", hit.prefix or "On Sale", offer.quantity, hit.name or "?",
+    PC:FormatMoney(offer.total)))
   OnSale:RemoveHit(hit.key)
   ShowMessage(string.format("Bought %d for %s", offer.quantity, PC:FormatMoney(offer.total)), true)
 end
@@ -202,7 +204,7 @@ local function Failed(message)
   if not (state and state.buying) or state.done then return end
   if state.offer.kind == "commodity" and not state.confirmed then C_AuctionHouse.CancelCommoditiesPurchase() end
   state.done = true
-  PC:Print("On Sale: " .. message)
+  PC:Print((state.hit.prefix or "On Sale") .. ": " .. message)
   ShowMessage(message, true)
 end
 
@@ -271,7 +273,6 @@ local function CreateDialog()
   dialog:SetScript("OnDragStart", dialog.StartMoving)
   dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
   dialog:Hide()
-  dialog.TitleText:SetText("ProfitCraft On Sale")
   dialog.icon = dialog:CreateTexture(nil, "ARTWORK")
   dialog.icon:SetSize(32, 32)
   dialog.icon:SetPoint("TOPLEFT", 14, -32)
@@ -295,17 +296,20 @@ local function CreateDialog()
   dialog.CloseButton:SetScript("OnClick", function() PC:Call("on sale cancel", CloseDialog) end)
 end
 
--- Clicking a find: search that item and offer what's still on sale.
-function OnSale:Inspect(key)
-  local hit = self:GetHit(key)
-  if not hit then return end
+-- Search an item and offer what's still at or under hit.limit. Also used by the Recipes panel (UI/AHRecipes.lua),
+-- whose hits aren't On Sale finds; optional fields: stackable (else judged by the item), dialogTitle, note (the line
+-- under the offer), goneText, prefix (chat messages), anchor (frame the dialog is centred on).
+function OnSale:InspectHit(hit)
   if inspecting then CloseDialog() end
   if not dialog then CreateDialog() end
-  inspecting = { hit = hit, stackable = self:IsStackable(hit.itemID), itemKey = hit.itemKey }
+  local stackable = hit.stackable
+  if stackable == nil then stackable = self:IsStackable(hit.itemID) end
+  inspecting = { hit = hit, stackable = stackable, itemKey = hit.itemKey }
   local state = inspecting
   OnSale:SetBusy(true)
+  dialog.TitleText:SetText(hit.dialogTitle or "ProfitCraft On Sale")
   dialog:ClearAllPoints()
-  dialog:SetPoint("CENTER", panel or UIParent, "CENTER", 0, 60)
+  dialog:SetPoint("CENTER", hit.anchor or panel or UIParent, "CENTER", 0, 60)
   dialog.icon:SetTexture(PC.Items:GetIcon(hit.itemID) or 134400)
   dialog.title:SetText(hit.name or PC.Items:GetName(hit.itemID))
   dialog:Show()
@@ -320,6 +324,12 @@ function OnSale:Inspect(key)
   C_Timer.After(ANSWER_TIMEOUT, function()
     if inspecting == state and not state.offer then ShowMessage("No answer from the Auction House. Try again.", true) end
   end)
+end
+
+-- Clicking a find: search that item and offer what's still on sale.
+function OnSale:Inspect(key)
+  local hit = self:GetHit(key)
+  if hit then self:InspectHit(hit) end
 end
 
 function OnSale:GetDialogState() return inspecting end

@@ -15,6 +15,8 @@
 
 local _, PC = ...
 
+local NOTICE_COLOR = "|cffff8000"  -- orange, as Blizzard's raid warnings (summary-scan and history notices)
+
 local Scan = {}
 PC.Scan = Scan
 
@@ -222,7 +224,6 @@ end)
 local SUMMARY_NOTICE = "Auctionator summary scan detected. For exact reagent costs and On Sale, switch "
   .. "Auctionator to its detailed scan: Auctionator settings > Advanced > \"Use alternate slower scan mode by default\"."
 local SUMMARY_WARNING = "ProfitCraft: Auctionator ran a SUMMARY scan - On Sale needs its detailed scan"
-local NOTICE_COLOR = "|cffff8000"  -- orange, as Blizzard's raid warnings
 
 -- Only when Auctionator really runs a summary scan, never on opening the AH (Sylice, 2026-11-20). A raid-warning style
 -- message in the middle of the screen (Forever: Blizzard_RaidWarning, RaidWarningFrame:AddMessage) and an orange chat

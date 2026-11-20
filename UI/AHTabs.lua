@@ -14,7 +14,8 @@ local _, PC = ...
 local AHTabs = {}
 PC.AHTabs = AHTabs
 
-local GAP = 4  -- between two tabs' frames, and between the column and the AH window / a panel
+local GAP = 4    -- between two tabs' frames, and between the column and an open panel
+local EDGE = 1   -- between the AH window's edge and the tabs' frames (0.3.6 had 4 plus centring: "a big gap")
 
 -- Sizes for the icon size set in the settings (ahTabSize, 24-44): the slot frame drawn around the icon keeps the
 -- proportions of Forever's character-window slots (47 px frame around a 37 px button, PaperDollFrame.xml).
@@ -27,7 +28,7 @@ end
 -- Panels' x offset from the AH window's right edge: right of the tab column.
 function AHTabs:PanelOffset()
   local _, frame = Sizes()
-  return frame + 2 * GAP
+  return EDGE + frame + GAP
 end
 
 -- Anchors a panel right of the tab column (again after the tab size changes).
@@ -48,7 +49,10 @@ function AHTabs:Update()
   for _, tab in ipairs(column.tabs) do
     local entry = tab.entry
     local panel = entry.panel()
-    tab:SetChecked(panel ~= nil and panel:IsShown())
+    local open = panel ~= nil and panel:IsShown()
+    tab:SetChecked(open)
+    -- The open panel's tab: a gold frame on top of the additive glow.
+    if open then tab.border:SetVertexColor(1, 0.82, 0) else tab.border:SetVertexColor(1, 1, 1) end
     local count = entry.count and entry.count() or 0
     tab.badge:SetText(count > 0 and tostring(count) or "")
   end
@@ -80,7 +84,11 @@ local function CreateTab(entry)
   tab.border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
   tab.border:SetPoint("CENTER", 0, -1)
   tab:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-  tab:SetCheckedTexture("Interface\\Buttons\\CheckButtonHilight", "ADD")
+  -- SetCheckedTexture takes the texture only (Forever API docs, SimpleCheckboxAPI); its blend mode is set on the
+  -- texture. 0.3.6 passed "ADD" as a second argument, which was ignored: drawn normally, the glow's dark parts
+  -- blacked out the icon (Sylice, 2026-11-20).
+  tab:SetCheckedTexture("Interface\\Buttons\\CheckButtonHilight")
+  tab:GetCheckedTexture():SetBlendMode("ADD")
   tab.badge = tab:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
   tab.badge:SetPoint("BOTTOMRIGHT", 2, -1)
   tab:SetScript("OnClick", function()
@@ -104,11 +112,11 @@ local function Layout()
   if not column then return end
   local icon, frame = Sizes()
   local pitch = frame + GAP
-  column:SetSize(frame + 2 * GAP, #column.tabs * pitch)
+  column:SetSize(EDGE + frame + GAP, #column.tabs * pitch)
   for index, tab in ipairs(column.tabs) do
     tab:SetSize(icon, icon)
     tab:ClearAllPoints()
-    tab:SetPoint("TOP", column, "TOP", 0, -(index - 1) * pitch - (frame - icon) / 2)
+    tab:SetPoint("TOPLEFT", column, "TOPLEFT", EDGE + (frame - icon) / 2, -(index - 1) * pitch - (frame - icon) / 2)
     tab.border:SetSize(frame, frame)
     tab.badge:SetFontObject(icon >= 36 and "NumberFontNormal" or "NumberFontNormalSmall")
   end

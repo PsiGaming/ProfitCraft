@@ -362,6 +362,26 @@ Sylice: keep looking for deals across **all** items (full-scan finds stay for ev
 - Not possible: knowing the price things **sell** at (the AH shows addons listings, not sales). Inferring sales from listings that disappear between checks would be a separate, bigger feature.
 - Tests: 309 checks + 15 without Auctionator.
 
+### Recipes panel at the AH (released as `0.3.7`, 2026-11-20)
+
+- **Why** (Sylice): finding profitable recipes on the AH meant hovering hundreds of recipe items one by one; needed "an easy answer": one button, one sorted list. A profit column inside Blizzard's browse list was rejected: the list sorts server-side (each header carries an `Enum.AuctionHouseSortOrder`, `AuctionHouseTableBuilder.GetBrowseListLayout`), so a profit sort would mean reordering Blizzard's internal results from addon code (taint risk next to protected buying).
+- **`UI/AHRecipes.lua`**, third AH tab ("Recipes", `INV_Scroll_03`), panel `ProfitCraftRecipes` (480 x 580) right of the tabs.
+- **Scan recipes:** the character's professions (`GetProfessions` / `GetProfessionInfo`, as Forever's own profession window, Camelot `Blizzard_ProfessionsFrame.lua`), each matched by name to the Recipe subclass of the same name (`C_Item.GetItemSubClassInfo(Enum.ItemClass.Recipe, n)`; Book skipped; no hard-coded IDs). One `SendBrowseQuery` per profession (`itemClassFilters { classID = 9, subClassID }`), more pages with `RequestMoreBrowseResults` until `HasFullBrowseResults` (at most 20), one AH request a second, 10 s timeout per answer. On Sale's watch is paused meanwhile (`OnSale:SetBusy`); refused while RapidFire runs. Requests go through `OnSale.Send` (marked as ProfitCraft's own). Stop button while scanning.
+- **Recipe of an item:** the `ItemSpellTriggerLearn` line (type 38) of `C_TooltipInfo.GetItemByID(itemID)` (Forever API docs; the same line ProfitCraft's recipe tooltip reads, confirmed by PsiLab from bag items; **not yet confirmed in game for `GetItemByID`**). Not loaded yet: item data requested, read again on `ITEM_DATA_CHANGED`. Cached in `ProfitCraftDB.recipeOfItem`.
+- **Per row:** the same `Profit:Evaluate` as the recipe tooltip: profit per craft, % of the reagent cost, "pays off after" = ceil(recipe price / profit) crafts; BoP products "BoP", enchants "no item", missing prices "no price", unread "?". The same item listed in several results: cheapest counts. Known recipes (`C_TradeSkillUI.GetRecipeInfo(id).learned`; without the profession window open not confirmed in game) marked "(known)" in grey; "Hide known" checkbox (setting `recipesHideKnown`, off by default).
+- **Sorting:** clickable headers Recipe / AH price / Profit / craft / % / Pays off with Blizzard's AH sort arrow (`auctionhouse-ui-sortarrow`, flipped as `AuctionHouseTableHeaderStringMixin:SetArrowState` does); default profit, best first; click again to reverse; unknown values always last.
+- **Hover:** the item's tooltip (with ProfitCraft's recipe lines), listed count and cheapest price, pays-off line, known. **Click:** On Sale's buy dialog (`OnSale:InspectHit`, generalised in 0.3.7 with optional title, note, gone text, chat prefix, anchor), the cheapest listing at or under the listed price, bought with `PlaceBid` from the Buy button.
+- Results stay until the next scan in the session.
+
+### AH tab fixes in `0.3.7`
+
+- Tabs 1 unit from the AH window's edge (`EDGE`; 0.3.6: 4 plus centring, "a big gap"); panels at EDGE + frame + 4.
+- **Selected tab blacked out (0.3.6):** `SetCheckedTexture` takes the texture only (Forever API docs, `SimpleCheckboxAPIDocumentation`); the "ADD" passed as a second argument was ignored, so `CheckButtonHilight` drew normally and its dark parts covered the icon. Now `GetCheckedTexture():SetBlendMode("ADD")`, and the open panel's tab also gets a gold frame (`SetVertexColor` on the slot frame).
+
+### Bug fixed in `0.3.7`: history notice colour
+
+- `Scan.lua` (0.3.3-0.3.6) used `NOTICE_COLOR` in the "Price history" chat line before the line defining it, so it was nil there; WoW's Lua 5.1 errors on `string.format("%s", nil)` (the line was likely never shown, error logged instead). Defined at the top now. The test harness's `string.format` now errors on nil like Lua 5.1 (LuaJIT prints "nil"), so this kind of bug fails the tests.
+
 ### Profit percentage in recipe tooltips (released as `0.3.4`, 2026-11-20)
 
 - Trainer and recipe-item tooltips (`UI/RecipeTooltip.lua`) add the profit as a percentage of the reagent cost after "Profit per craft" and "Craft and disenchant", in grey, left of the amount so the right-aligned money values stay lined up (Sylice), e.g. `(+114%) +4s 55c`; rounded to whole percent; nothing when the cost is unknown or zero (Sylice: to compare recipes' efficiency). The profession window's profit list is unchanged.

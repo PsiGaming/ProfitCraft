@@ -22,6 +22,7 @@ local DEFAULT_SETTINGS = {
   onSaleSound = true,   -- On Sale: sound on each new find
   onSaleGlow = true,    -- On Sale: screen glow on a new find until the mouse is over the AH or the On Sale panel
   scanWarning = true,   -- raid-warning style notice when Auctionator runs a summary scan; history notice after scans
+  recipesHideKnown = false,  -- Recipes panel at the AH: hide recipes the character knows (UI/AHRecipes.lua)
   ahTabSize = 24,       -- size (px) of the icons of ProfitCraft's tabs at the AH window (UI/AHTabs.lua), 24-44
 }
 
@@ -64,6 +65,7 @@ PC:RegisterEvent("ADDON_LOADED", function(name)
   -- products of every recipe seen on the account, and the time of ProfitCraft's own last full scan.
   db.snapshot = type(db.snapshot) == "table" and db.snapshot or {}
   db.recipeItems = type(db.recipeItems) == "table" and db.recipeItems or {}
+  db.recipeOfItem = type(db.recipeOfItem) == "table" and db.recipeOfItem or {}  -- recipe item ID -> recipe it teaches
   -- RapidFire (UI/Rapid.lua), account-wide: watch list { itemID, max (copper per unit), on }, the money to keep,
   -- seconds between checks of each item, sound, buy key.
   local rapidFire = type(db.rapidFire) == "table" and db.rapidFire or {}
