@@ -18,7 +18,7 @@ local ANSWER_TIMEOUT = 5
 local RESULT_TIMEOUT = 10
 local CLOSE_DELAY = 1.5
 
-local panel, toggleButton, statusText, startButton, findsView, searchesView, editView, pasteView, findsHeader
+local panel, statusText, startButton, findsView, searchesView, editView, pasteView, findsHeader
 local editing  -- the search being edited (nil = new)
 local editState = {}
 local dialog, buyButton
@@ -782,10 +782,7 @@ local function UpdateStatus()
 end
 
 function Refresh()
-  if toggleButton then
-    local count = #OnSale:GetHits()
-    toggleButton:SetText(count > 0 and ("On Sale (" .. count .. ")") or "On Sale")
-  end
+  PC.AHTabs:Update()  -- the number of finds on the tab and header button
   if not (panel and panel:IsShown()) then return end
   if currentView == "finds" then RefreshFinds() elseif currentView == "searches" then RefreshSearches() end
   UpdateStatus()
@@ -867,17 +864,22 @@ local function CreatePanel()
   ShowView(#OnSale:GetSearches() == 0 and "searches" or "finds")
 end
 
-local function CreateToggle()
-  toggleButton = Button(AuctionHouseFrame, "On Sale", 100)
-  toggleButton:SetPoint("BOTTOMRIGHT", AuctionHouseFrame, "BOTTOMRIGHT", -90, 4)  -- left of RapidFire's button
-  toggleButton:SetScript("OnClick", function()
-    PC:Call("on sale panel", function()
-      if not panel then CreatePanel() end
-      panel:SetShown(not panel:IsShown())
-      if panel:IsShown() then PC:Send("AH_PANEL_SHOWN", "onsale") end
-    end)
-  end)
-end
+PC.AHTabs:Register({
+  key = "onsale",
+  title = "On Sale",
+  icon = "Interface\\Icons\\INV_Misc_Note_01",
+  help = "Find listings far below their usual price: your searches while it runs, and every full scan.",
+  panel = function() return panel end,
+  count = function() return #OnSale:GetHits() end,
+  open = function()
+    if not panel then
+      CreatePanel()
+      PC.AHTabs:AddHeader(panel, "onsale")
+    end
+    panel:Show()
+    PC:Send("AH_PANEL_SHOWN", "onsale")
+  end,
+})
 
 ---------------------------------------------------------------------------
 -- Screen glow: Blizzard's low-health glow (Forever source: Blizzard_FrameXML/Mainline/LowHealthFrame.xml,
@@ -927,7 +929,6 @@ PC:Listen("ONSALE_CHANGED", function()
 end)
 
 PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()
-  if AuctionHouseFrame and not toggleButton then CreateToggle() end
   Refresh()
 end)
 

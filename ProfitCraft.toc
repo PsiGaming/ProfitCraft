@@ -2,7 +2,7 @@
 ## Title: ProfitCraft
 ## Notes: Ranks your crafting recipes by profit and estimates disenchant values, using Auctionator's prices.
 ## Author: Psipherious
-## Version: 0.3.3
+## Version: 0.3.4
 ## SavedVariables: ProfitCraftDB
 ## OptionalDeps: Auctionator
 
@@ -25,6 +25,7 @@ UI/RecipeTooltip.lua
 UI/Bags.lua
 UI/BagSpace.lua
 UI/MoneyWindow.lua
+UI/AHTabs.lua
 UI/Rapid.lua
 UI/OnSale.lua
 UI/Settings.lua

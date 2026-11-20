@@ -9,6 +9,13 @@ local _, PC = ...
 
 local LEARN_LINE = Enum.TooltipDataLineType and Enum.TooltipDataLineType.ItemSpellTriggerLearn or 38
 local RECIPE_ITEM_CLASS = Enum.ItemClass and Enum.ItemClass.Recipe or 9
+-- Profit as a percentage of the reagent cost, e.g. "(+48%) ", to compare recipes' efficiency (Sylice, 2026-11-20).
+-- Goes left of the amount, so the right-aligned money values stay lined up. Nothing when the cost is unknown or zero.
+local function Percent(profit, cost)
+  if not (profit and cost and cost > 0) then return "" end
+  return string.format("|cffaaaaaa(%+d%%)|r ", math.floor(profit / cost * 100 + 0.5))
+end
+
 local function AddRecipeLines(tooltip, recipeID)
   local recipe = PC.Recipes:Load(recipeID)
   if not (recipe and recipe.outputItemID) then return end  -- e.g. enchants: no product to sell
@@ -27,11 +34,12 @@ local function AddRecipeLines(tooltip, recipeID)
   else
     tooltip:AddDoubleLine("Auction price" .. amount, PC:FormatMoney(result.salePrice and result.salePrice * result.quantity),
       1, 1, 1)
-    tooltip:AddDoubleLine("Profit per craft", result.profitCraft and PC:FormatProfit(result.profitCraft) or "|cff888888?|r",
-      1, 1, 1)
+    tooltip:AddDoubleLine("Profit per craft", result.profitCraft
+      and (Percent(result.profitCraft, result.cost) .. PC:FormatProfit(result.profitCraft)) or "|cff888888?|r", 1, 1, 1)
   end
   if result.profitDisenchant then
-    tooltip:AddDoubleLine("Craft and disenchant", PC:FormatProfit(result.profitDisenchant), 1, 1, 1)
+    tooltip:AddDoubleLine("Craft and disenchant",
+      Percent(result.profitDisenchant, result.cost) .. PC:FormatProfit(result.profitDisenchant), 1, 1, 1)
   end
 end
 

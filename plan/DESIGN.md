@@ -362,6 +362,17 @@ Sylice: keep looking for deals across **all** items (full-scan finds stay for ev
 - Not possible: knowing the price things **sell** at (the AH shows addons listings, not sales). Inferring sales from listings that disappear between checks would be a separate, bigger feature.
 - Tests: 309 checks + 15 without Auctionator.
 
+### Profit percentage in recipe tooltips (released as `0.3.4`, 2026-11-20)
+
+- Trainer and recipe-item tooltips (`UI/RecipeTooltip.lua`) add the profit as a percentage of the reagent cost after "Profit per craft" and "Craft and disenchant", in grey, left of the amount so the right-aligned money values stay lined up (Sylice), e.g. `(+114%) +4s 55c`; rounded to whole percent; nothing when the cost is unknown or zero (Sylice: to compare recipes' efficiency). The profession window's profit list is unchanged.
+
+### AH side tabs (released as `0.3.4`, 2026-11-20)
+
+- **Why:** the RapidFire and On Sale buttons sat in the AH window's bottom-right corner, where Blizzard's Auctions tab (Cancel Auction), Auctionator's Shopping tab (Export Results) and Cancelling tab (Undercut, Cancel) put their own buttons and covered ours (Sylice, 2026-11-20).
+- **Now (`UI/AHTabs.lua`):** a column of `LargeSideTabButtonTemplate` tabs (the same template as the ProfitCraft tab on the profession window) outside the AH window's right edge, 60 px from its top like Forever's profession tabs; one per registered panel (RapidFire, On Sale; Recipes next), with icon, tooltip and a count badge (On Sale's finds). The column is **hidden while any of the panels is open**, so it adds no width then (Sylice worried about small screens). An open panel has the same choices as page buttons in its header strip (between title bar and inset, right of the portrait): its own button lit (`LockHighlight`), the others switch panels in place; close with the panel's X. One panel at a time as before (`AH_PANEL_SHOWN`).
+- Panels register with `PC.AHTabs:Register{ key, title, icon, help, panel(), open(), count() }` and add the header with `PC.AHTabs:AddHeader(panel, key)`. Icons: RapidFire `Ability_Hunter_RunningShot`, On Sale `INV_Misc_Note_01` (not checked in game).
+- Without Auctionator, ProfitCraft's own "Full scan" button stays next to the AH's money display (no clash reported).
+
 ### Scan notices, 3 days in the last 7, local days (released as `0.3.3`, 2026-11-20)
 
 - **Summary-scan notice** (Sylice: Auctionator's detailed scan is vital; no pop-up boxes, never on just opening the AH): only when Auctionator really runs a summary scan, a raid-warning style message (`RaidWarningFrame:AddMessage`, Forever `Blizzard_RaidWarning`, raid-warning colour) plus an orange chat line with the setting's path. Setting `scanWarning` (on by default, ON SALE column) turns it off.

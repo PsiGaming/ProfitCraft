@@ -33,7 +33,7 @@ local ROW_HEIGHT = 24
 local BUY_BUTTON_NAME = "ProfitCraftRapidFireBuy"
 local SORT_BY_PRICE = { { sortOrder = Enum.AuctionHouseSortOrder and Enum.AuctionHouseSortOrder.Price or 0, reverseSort = false } }
 
-local panel, historyPanel, toggleButton, popup, buyButton, statusText, startButton, idBox, keyButton, keepInput
+local panel, historyPanel, popup, buyButton, statusText, startButton, idBox, keyButton, keepInput
 local intervalSlider
 local rows = {}
 local running, generation, queueIndex, lastCheck = false, 0, 0, nil
@@ -950,27 +950,25 @@ local function CreatePopup()
   end)
 end
 
-local function CreateToggle()
-  toggleButton = CreateFrame("Button", nil, AuctionHouseFrame, "UIPanelButtonTemplate")
-  toggleButton:SetSize(80, 22)
-  toggleButton:SetPoint("BOTTOMRIGHT", AuctionHouseFrame, "BOTTOMRIGHT", -6, 4)
-  toggleButton:SetText("RapidFire")
-  toggleButton:SetScript("OnClick", function()
-    PC:Call("rapidfire panel", function()
-      if not panel then CreatePanel() end
-      panel:SetShown(not panel:IsShown())
-      if panel:IsShown() then PC:Send("AH_PANEL_SHOWN", "rapid") end  -- one panel at the AH's edge at a time
-    end)
-  end)
-end
+PC.AHTabs:Register({
+  key = "rapidfire",
+  title = "RapidFire",
+  icon = "Interface\\Icons\\Ability_Hunter_RunningShot",
+  help = "Watch a few items closely and buy them at your price with one key.",
+  panel = function() return panel end,
+  open = function()
+    if not panel then
+      CreatePanel()
+      PC.AHTabs:AddHeader(panel, "rapidfire")
+    end
+    panel:Show()
+    PC:Send("AH_PANEL_SHOWN", "rapid")  -- one panel at the AH's edge at a time
+  end,
+})
 
 PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()
   ResetSession()  -- a new AH visit (also if the last one ended without the closing event)
-  if not AuctionHouseFrame then return end
-  if not toggleButton then
-    CreateToggle()
-    CreatePopup()
-  end
+  if AuctionHouseFrame and not popup then CreatePopup() end
 end)
 
 PC:Listen("AH_PANEL_SHOWN", function(which)
