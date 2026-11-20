@@ -100,6 +100,15 @@ local function Finish()
   PC:Send("PRICES_CHANGED")
   PC:Send("SCAN_CHANGED")
   if r.collector and not r.collector.failed then PC:Call("On Sale scan", r.collector.Finish, r.collector) end
+  PC:Call("scan days", function()
+    PC.History:NoteScanDay()
+    local days = PC.History:ScanDaysInWeek()
+    if days < PC.History.MIN_DAYS and PC.db.settings.scanWarning then
+      PC:Print(string.format("%sPrice history: full scans on %d of the last 7 days. On Sale's usual prices (and gear "
+        .. "finds) need scans on %d different days.|r", NOTICE_COLOR, days, PC.History.MIN_DAYS))
+    end
+    PC:Send("ONSALE_STATUS")
+  end)
 end
 
 -- Adds one listing (index into the game's scan list) to the snapshot being built. A listing of a recipe item that
@@ -210,8 +219,21 @@ end)
 -- With Auctionator: follow its scans
 ---------------------------------------------------------------------------
 
-local SUMMARY_NOTICE = "Auctionator summary scan detected. For exact reagent costs and on-sale detection, switch "
+local SUMMARY_NOTICE = "Auctionator summary scan detected. For exact reagent costs and On Sale, switch "
   .. "Auctionator to its detailed scan: Auctionator settings > Advanced > \"Use alternate slower scan mode by default\"."
+local SUMMARY_WARNING = "ProfitCraft: Auctionator ran a SUMMARY scan - On Sale needs its detailed scan"
+local NOTICE_COLOR = "|cffff8000"  -- orange, as Blizzard's raid warnings
+
+-- Only when Auctionator really runs a summary scan, never on opening the AH (Sylice, 2026-11-20). A raid-warning style
+-- message in the middle of the screen (Forever: Blizzard_RaidWarning, RaidWarningFrame:AddMessage) and an orange chat
+-- line with the setting's path. Off with the "scanWarning" setting.
+local function SummaryNotice()
+  if not PC.db.settings.scanWarning then return end
+  if RaidWarningFrame and RaidWarningFrame.AddMessage then
+    RaidWarningFrame:AddMessage(SUMMARY_WARNING, ChatTypeInfo and ChatTypeInfo["RAID_WARNING"])
+  end
+  PC:Print(NOTICE_COLOR .. SUMMARY_NOTICE .. "|r")
+end
 
 -- Each hook checks that a scan really started now (Auctionator sets its scan time when it starts one and refuses
 -- otherwise, e.g. within 15 minutes of the last full scan).
@@ -231,7 +253,7 @@ local function HookAuctionator()
     hooksecurefunc(summary, "InitiateScan", function(frame)
       PC:Call("Auctionator summary scan", function()
         if frame.doingFullScan and frame.state and frame.state.TimeOfLastBrowseScan == time() then
-          PC:Print(SUMMARY_NOTICE)
+          SummaryNotice()
         end
       end)
     end)

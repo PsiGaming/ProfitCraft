@@ -21,6 +21,7 @@ local DEFAULT_SETTINGS = {
   onSaleInterval = 10,  -- On Sale: seconds between two searches
   onSaleSound = true,   -- On Sale: sound on each new find
   onSaleGlow = true,    -- On Sale: screen glow on a new find until the mouse is over the AH or the On Sale panel
+  scanWarning = true,   -- raid-warning style notice when Auctionator runs a summary scan; history notice after scans
 }
 
 -- upgrades[n] turns a version n-1 database into version n.
@@ -79,6 +80,7 @@ PC:RegisterEvent("ADDON_LOADED", function(name)
   onSale.nextID = onSale.nextID or 1
   db.onSale = onSale
   db.history = type(db.history) == "table" and db.history or {}
+  db.scanDays = type(db.scanDays) == "table" and db.scanDays or {}  -- ruleset key -> { [local day] = true } (History.lua)
   ProfitCraftDB = db
   PC.db = db
   PC:Send("DATA_READY")

@@ -85,6 +85,10 @@ local OPTIONS = {
   { key = "onSaleSound", label = "Sound on each new find",
     help = "Plays a sound when On Sale finds something new. To hear it while the game is in the background, turn "
       .. "on Blizzard's \"Sound in Background\" (Options > Audio)." },
+  { key = "scanWarning", label = "Warn about summary scans and thin history",
+    help = "When Auctionator runs its quick SUMMARY scan, a raid-warning style message and an orange chat line say "
+      .. "that On Sale needs Auctionator's detailed scan. After a full scan, a chat line says when you've scanned on "
+      .. "fewer than 3 of the last 7 days. Never shown on just opening the Auction House." },
   { key = "onSaleGlow", label = "Screen glow on each new find",
     help = "A pulsing gold glow around the screen edges (Blizzard's low-health glow, in gold) after a new find, until "
       .. "you move the mouse over the Auction House or the On Sale panel." },

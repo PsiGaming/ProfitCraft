@@ -362,6 +362,14 @@ Sylice: keep looking for deals across **all** items (full-scan finds stay for ev
 - Not possible: knowing the price things **sell** at (the AH shows addons listings, not sales). Inferring sales from listings that disappear between checks would be a separate, bigger feature.
 - Tests: 309 checks + 15 without Auctionator.
 
+### Scan notices, 3 days in the last 7, local days (released as `0.3.3`, 2026-11-20)
+
+- **Summary-scan notice** (Sylice: Auctionator's detailed scan is vital; no pop-up boxes, never on just opening the AH): only when Auctionator really runs a summary scan, a raid-warning style message (`RaidWarningFrame:AddMessage`, Forever `Blizzard_RaidWarning`, raid-warning colour) plus an orange chat line with the setting's path. Setting `scanWarning` (on by default, ON SALE column) turns it off.
+- **History notice:** ProfitCraft notes each local day on which it reads a full scan (`ProfitCraftDB.scanDays[ruleset key]`). After a scan, while that's fewer than 3 of the last 7 days, an orange chat line says so (same setting). The On Sale panel shows "History: N of 7 days" at its top right (orange under 3, green from 3; tooltip explains).
+- **Usual price needs 3 days with prices within the last 7 days** and uses only those days (was: any 3 of up to 14 stored days). Auctionator's history is limited to its last 7 days too (its day numbers count from `Auctionator.Constants.SCAN_DAY_0`).
+- **Days and hours follow the local clock** (day changes at local midnight; was UTC, 19:00 for Sylice). Offset from `date("!*t")` with the summer-time flag carried over.
+- Tests: 318 checks + 15 without Auctionator.
+
 ### History (own, per item and variant)
 
 - **Key:** `itemID:variant` per ruleset key (section 6): variant 0, or for weapons and armour the full name in lower case (see the fixes above; was `itemID:suffix` in 0.3-beta.0). Item level is left out of the key: on Forever an item ID has one item level unless scaled; to revisit if results show several levels per item ID.

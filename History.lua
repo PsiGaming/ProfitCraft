@@ -5,8 +5,8 @@
 -- (OnSale:Variant: 0, or for weapons and armour the full item name, which includes a random suffix):
 -- * the first price seen in each hour of the day (the cheapest listing of other sellers at that moment);
 -- * at the end of a day, the median of that day's hourly prices becomes the day's price;
--- * usual price = the lower of the median of the last 7 daily prices and the median of the last 2 (today's so far
---   included), once there are at least 3 days. The 2-day part follows a price that has come down to a new regular
+-- * usual price = the lower of the median of the daily prices of the last 7 days and the median of the last 2 (today's
+--   so far included), once at least 3 of the last 7 days have a price (Sylice, 2026-11-20: "3 days in the past 7"). The 2-day part follows a price that has come down to a new regular
 --   level, so it stops counting as "on sale" within about two days (Sylice, 2026-11-19: potions that got cheaper were
 --   reported as deals); a single cheap listing barely moves it.
 -- Daily lows are not used: a search every minute sees every short-lived cheap listing, which would pull the usual
@@ -21,13 +21,24 @@ local History = {}
 PC.History = History
 
 local KEEP_DAYS = 14
-local USUAL_DAYS = 7
+local USUAL_DAYS = 7     -- only days within the last 7 count (today included); at least MIN_DAYS of them
 local RECENT_DAYS = 2
 local MIN_DAYS = 3
 local FALLBACK_CACHE_SECONDS = 600
 
-local function Today() return math.floor(time() / 86400) end
-local function Hour() return math.floor(time() / 3600) % 24 end
+-- Days and hours follow the player's local clock (Sylice, 2026-11-20: a day should end at local midnight, not UTC).
+-- Day number = whole days since 1970 in local time; the offset is worked out from the clock each time (summer time).
+local function LocalOffset(now)
+  local utc = date("!*t", now)
+  utc.isdst = date("*t", now).isdst  -- else the offset is an hour off during summer time
+  return now - time(utc)
+end
+local function Today()
+  local now = time()
+  return math.floor((now + LocalOffset(now)) / 86400)
+end
+local function Hour() return date("*t", time()).hour end
+History.Today = Today
 
 local function Median(values)
   if #values == 0 then return nil end
@@ -106,8 +117,12 @@ local function AuctionatorDays(itemID)
     local ok, result = pcall(database.GetPriceHistory, database, tostring(itemID))
     if ok and type(result) == "table" then
       prices = {}
+      -- Only the last 7 of Auctionator's days (its day numbers count from Auctionator.Constants.SCAN_DAY_0).
+      local day0 = type(Auctionator.Constants) == "table" and tonumber(Auctionator.Constants.SCAN_DAY_0)
+      local first = day0 and (math.floor((time() - day0) / 86400) - USUAL_DAYS + 1)
       for _, day in ipairs(result) do
-        if type(day) == "table" and type(day.minSeen) == "number" and day.minSeen > 0 then
+        if type(day) == "table" and type(day.minSeen) == "number" and day.minSeen > 0
+          and not (first and tonumber(day.rawDay) and tonumber(day.rawDay) < first) then
           prices[#prices + 1] = day.minSeen
         end
       end
@@ -128,10 +143,12 @@ local function Usual(prices)
 end
 
 function History:GetUsual(itemID, variant, allowFallback)
-  local days = self:GetDays(itemID, variant)
-  if #days >= MIN_DAYS then
-    local prices = {}
-    for i, day in ipairs(days) do prices[i] = day[2] end
+  local first = Today() - USUAL_DAYS + 1
+  local prices = {}
+  for _, day in ipairs(self:GetDays(itemID, variant)) do
+    if day[1] >= first then prices[#prices + 1] = day[2] end
+  end
+  if #prices >= MIN_DAYS then
     local usual, count = Usual(prices)
     return usual, "own", count
   end
@@ -143,6 +160,28 @@ function History:GetUsual(itemID, variant, allowFallback)
   end
   return nil
 end
+
+-- Days with a full scan read (Scan.lua), per ruleset key; for the "3 of the last 7 days" notice.
+function History:NoteScanDay()
+  local all = PC.db.scanDays
+  local key = PC.Scan:RulesetKey()
+  all[key] = all[key] or {}
+  all[key][Today()] = true
+  for day in pairs(all[key]) do
+    if day <= Today() - KEEP_DAYS then all[key][day] = nil end
+  end
+end
+
+-- Number of the last 7 days (today included) with a full scan.
+function History:ScanDaysInWeek()
+  local days = PC.db.scanDays[PC.Scan:RulesetKey()] or {}
+  local count = 0
+  for day in pairs(days) do
+    if day > Today() - USUAL_DAYS then count = count + 1 end
+  end
+  return count
+end
+History.MIN_DAYS = MIN_DAYS
 
 -- Number of items (+ suffixes) with history on this ruleset.
 function History:Count()

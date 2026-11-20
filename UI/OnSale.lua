@@ -776,6 +776,9 @@ local function UpdateStatus()
   if not panel then return end
   statusText:SetText(OnSale:GetStatus())
   startButton:SetText(OnSale:IsRunning() and "Stop" or "Start")
+  local days = PC.History:ScanDaysInWeek()
+  panel.history.text:SetText(string.format("%sHistory: %d of 7 days|r", days < PC.History.MIN_DAYS and "|cffff8000"
+    or "|cff55ff55", days))
 end
 
 function Refresh()
@@ -802,6 +805,24 @@ local function CreatePanel()
   local findsTab = Button(inset, "Finds", 90)
   findsTab:SetPoint("LEFT", searchesTab, "RIGHT", 6, 0)
   findsTab:SetScript("OnClick", function() ShowView("finds") end)
+  -- Price history status: full scans on how many of the last 7 days (usual prices need 3).
+  local history = CreateFrame("Frame", nil, inset)
+  history:SetPoint("TOPRIGHT", -8, -6)
+  history:SetSize(170, 18)
+  history.text = history:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  history.text:SetPoint("RIGHT")
+  history.text:SetJustifyH("RIGHT")
+  history:EnableMouse(true)
+  history:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Price history", 1, 1, 1)
+    GameTooltip:AddLine("Days in the last 7 on which ProfitCraft read a full scan (Auctionator's detailed scan, or "
+      .. "ProfitCraft's own without Auctionator). An item needs prices on 3 of the last 7 days for a usual price; "
+      .. "weapons and armour only use ProfitCraft's own history.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  history:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  panel.history = history
 
   findsView = CreateFrame("Frame", nil, content)
   findsView:SetAllPoints()
