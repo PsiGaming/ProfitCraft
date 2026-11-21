@@ -145,7 +145,7 @@ local function CreateColumn()
 end
 
 PC:Listen("SETTINGS_CHANGED", function(key)
-  if key == "ahTabSize" or key == "onSaleEnabled" then PC:Call("tab layout", Layout) end
+  if key == "ahTabSize" or key == "onSaleMode" then PC:Call("tab layout", Layout) end
 end)
 
 PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()

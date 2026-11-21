@@ -42,6 +42,12 @@ local QUALITY_FILTER_NAMES = { [0] = "PoorQuality", "CommonQuality", "UncommonQu
 local function Settings() return PC.db.settings end
 local function Data() return PC.db.onSale end
 
+-- "off", "manual" (finds only for items the user's switched-on searches cover) or "auto" (the whole AH).
+function OnSale:GetMode()
+  local mode = Settings().onSaleMode
+  return (mode == "manual" or mode == "auto") and mode or "off"
+end
+
 local function Debug(message)
   if Settings().debug then PC:Print("On Sale: " .. message) end
 end
@@ -442,6 +448,7 @@ local searchIndex = 0
 local pausedUntil = 0
 local busy = false        -- the buy dialog is open
 local ownCall = false     -- set while ProfitCraft itself sends an AH request
+local roundOnly = false   -- the quick check on opening the AH: one pass through the searches, then stop
 
 local function Active()
   local list = {}
@@ -474,7 +481,7 @@ end
 local function EndTask(task)
   if current ~= task then return end
   current = nil
-  ScheduleNext(#queue > 0 and MIN_SPACING or Settings().onSaleInterval)
+  ScheduleNext((#queue > 0 or roundOnly) and MIN_SPACING or Settings().onSaleInterval)
 end
 
 local function QueueCheck(itemID, name, from, search)
@@ -648,6 +655,11 @@ function Tick(myGeneration)
       return
     end
     searchIndex = searchIndex + 1
+    if searchIndex > #active and roundOnly then
+      Debug("quick check on opening the AH done")
+      OnSale:Stop()
+      return
+    end
     if searchIndex > #active then
       searchIndex = 0
       task = RecheckTask()
@@ -750,9 +762,9 @@ for _, event in ipairs({ "ITEM_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_ADD
   PC:RegisterEvent(event, ReadItemListings)
 end
 
-function OnSale:Start()
+function OnSale:Start(oneRound)
   if running then return end
-  if not Settings().onSaleEnabled then
+  if OnSale:GetMode() == "off" then
     PC:Print("On Sale: the On Sale Finder is off (Settings > On Sale).")
     return
   end
@@ -762,10 +774,11 @@ function OnSale:Start()
   end
   if PC.Rapid and PC.Rapid:IsRunning() then PC.Rapid:Stop("On Sale started (only one can search at a time).") end
   running = true
+  roundOnly = oneRound and true or false
   newCount = 0
   searchIndex = 0
   generation = generation + 1
-  if C_CVar.GetCVar("Sound_EnableSoundWhenGameIsInBG") == "0" and Settings().onSaleSound then
+  if not oneRound and C_CVar.GetCVar("Sound_EnableSoundWhenGameIsInBG") == "0" and Settings().onSaleSound then
     PC:Print("On Sale: Blizzard's \"Sound in Background\" is off (Options > Audio), so you won't hear finds "
       .. "while the game is in the background.")
   end
@@ -797,6 +810,9 @@ end
 function OnSale:GetStatus()
   local active = #Active()
   if not running then return "Stopped." end
+  if roundOnly and not OnSale:IsPaused() then
+    return string.format("On Sale: checking your searches (%d of %d)", math.max(searchIndex, 1), active)
+  end
   local cycle = active * Settings().onSaleInterval
   local state = OnSale:IsPaused() and (busy and "paused while buying" or "paused: someone else searched")
     or string.format("%d searches, each every %s", active, cycle >= 60 and (math.floor(cycle / 60) .. " m "
@@ -828,12 +844,31 @@ end
 
 PC:RegisterEvent("AUCTION_HOUSE_SHOW", HookSearches)
 
--- Switched off: stop the watch and drop the finds.
-PC:Listen("SETTINGS_CHANGED", function(key, value)
-  if key == "onSaleEnabled" and not value then
+-- Another mode: stop the watch and drop the finds (Full Auto's finds don't belong in Manual, and Off has none).
+PC:Listen("SETTINGS_CHANGED", function(key)
+  if key == "onSaleMode" then
     OnSale:Stop()
     ClearHits()
   end
+end)
+
+-- Opening the AH in Manual or Full Auto: one quick pass through the switched-on searches, at most once a minute
+-- (Sylice, 2026-11-21: open, close and open again = one pass). Two seconds after opening, so Blizzard's own first
+-- search (favourites) has gone out and doesn't pause it.
+local OPEN_CHECK_EVERY = 60
+local OPEN_CHECK_DELAY = 2
+local lastOpenCheck
+PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()
+  if OnSale:GetMode() == "off" or #Active() == 0 then return end
+  if lastOpenCheck and GetTime() - lastOpenCheck < OPEN_CHECK_EVERY then return end
+  lastOpenCheck = GetTime()
+  C_Timer.After(OPEN_CHECK_DELAY, function()
+    PC:Call("on sale open check", function()
+      if running or not (AuctionHouseFrame and AuctionHouseFrame:IsShown()) then return end
+      if PC.Rapid and PC.Rapid:IsRunning() then return end
+      OnSale:Start(true)
+    end)
+  end)
 end)
 
 PC:RegisterEvent("AUCTION_HOUSE_CLOSED", function()
@@ -850,11 +885,67 @@ end)
 local Collector = {}
 Collector.__index = Collector
 
-function OnSale:NewScanCollector()
-  return setmetatable({ keys = {}, gear = {} }, Collector)
+-- Manual mode: the first switched-on search that covers a full-scan listing, or nil. Judged by the search's text
+-- (the listing's name), category (the item's class, subclass and slot, which are always known), quality (the scan's
+-- qualityID) and level ranges (item data; while not loaded, a search with a level range doesn't cover the listing,
+-- and the watch finds it instead).
+local function FiltersMatch(filters, itemID)
+  if not filters or #filters == 0 then return true end
+  local _, _, _, _, _, classID, subClassID = C_Item.GetItemInfoInstant(itemID)
+  for _, filter in ipairs(filters) do
+    if filter.classID == classID and (filter.subClassID == nil or filter.subClassID == subClassID)
+      and (filter.inventoryType == nil or (C_Item.GetItemInventoryTypeByID
+        and C_Item.GetItemInventoryTypeByID(itemID) == filter.inventoryType)) then
+      return true
+    end
+  end
+  return false
 end
 
-function Collector:Add(index, itemID, unitPrice, count, name)
+-- The switched-on searches, parsed once (a full scan asks for every item it sees).
+function OnSale:ParsedSearches()
+  local list = {}
+  for _, search in ipairs(Active()) do list[#list + 1] = { search = search, s = self:Parse(search.term) } end
+  return list
+end
+
+function OnSale:CoveringSearch(itemID, name, quality, parsed)
+  local _, byPath = self:GetCategories()
+  for _, entry in ipairs(parsed or self:ParsedSearches()) do
+    local search, s = entry.search, entry.s
+    local ok = self:IsUsable(s)
+    if ok and s.text ~= "" then
+      local lower = name and name:lower()
+      ok = lower ~= nil and (s.exact and lower == s.text:lower() or not s.exact and lower:find(s.text:lower(), 1, true) ~= nil)
+    end
+    if ok and s.category ~= "" then
+      local category = byPath[s.category]
+      ok = category ~= nil and FiltersMatch(category.filters, itemID)
+    end
+    if ok and s.quality then
+      local q = quality or select(3, C_Item.GetItemInfo(itemID))
+      ok = q ~= nil and q >= s.quality
+    end
+    if ok and (s.minItemLevel or s.maxItemLevel or s.minLevel or s.maxLevel) then
+      local _, _, _, itemLevel, minLevel = C_Item.GetItemInfo(itemID)
+      ok = itemLevel ~= nil
+        and not (s.minItemLevel and itemLevel < s.minItemLevel) and not (s.maxItemLevel and itemLevel > s.maxItemLevel)
+        and not (s.minLevel and (minLevel or 0) < s.minLevel) and not (s.maxLevel and (minLevel or 0) > s.maxLevel)
+    end
+    if ok then return search end
+  end
+  return nil
+end
+
+function OnSale:NewScanCollector()
+  local manual = OnSale:GetMode() == "manual"
+  return setmetatable({ keys = {}, gear = {}, manual = manual, searches = manual and OnSale:ParsedSearches() or nil },
+    Collector)
+end
+
+-- Every listing goes into the price history; with Manual mode only listings a search covers can become finds, judged
+-- by that search's rule.
+function Collector:Add(index, itemID, unitPrice, count, name, quality)
   local gear = self.gear[itemID]
   if gear == nil then
     gear = OnSale:IsGear(itemID)
@@ -873,8 +964,15 @@ function Collector:Add(index, itemID, unitPrice, count, name)
   local key = itemID .. ":" .. variant
   local entry = self.keys[key]
   if not entry then
+    local search, limit = nil, nil
+    if self.manual then
+      search = OnSale:CoveringSearch(itemID, name, quality, self.searches)
+      limit = search and OnSale:GetLimit(itemID, variant, search)
+    else
+      limit = OnSale:GetLimit(itemID, variant)
+    end
     entry = { itemID = itemID, variant = variant, min = unitPrice, units = 0, listings = 0, cheap = 0, levels = {},
-      cheapListings = 0, cheapCost = 0, name = name, limit = OnSale:GetLimit(itemID, variant) or false }
+      cheapListings = 0, cheapCost = 0, name = name, limit = limit or false, from = search and search.id or "scan" }
     self.keys[key] = entry
   end
   entry.name = entry.name or name
@@ -912,12 +1010,13 @@ function Collector:Finish()
         real = entry.cheapListings <= MAX_CHEAP_LISTINGS
           and (entry.listings < 3 or entry.cheapListings <= entry.listings * MARKET_SHARE)
       end
+      if limit.fixed then real = true end  -- a fixed price (a search's own rule) is taken as given
       local profit = Profit(limit, quantity, cost)
       if real and Worth(limit, profit) then
         OnSale:AddHit({ key = key, itemID = entry.itemID, variant = entry.variant,
           itemKey = limit.stackable and C_AuctionHouse.MakeItemKey(entry.itemID) or nil, name = entry.name,
           price = entry.cheapest, quantity = quantity, cost = cost, profit = profit, usual = limit.usual,
-          source = limit.source, limit = limit.limit, from = "scan" })
+          source = limit.source, limit = limit.limit, fixed = limit.fixed, from = entry.from })
         found = found + 1
       end
     end

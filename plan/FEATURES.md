@@ -169,6 +169,7 @@ Changes after Sylice's first test (2026-11-17, released as 0.2-beta.4):
   - **Libraries** that would do the chunking, throttling, encoding and compression: AceComm (with ChatThrottleLib), LibSerialize, LibDeflate. Licences not yet checked for use in MIT ProfitCraft; using them is a choice to make (ProfitCraft is written from scratch, but libraries are not other addons).
   - **APIs present in Forever's UI source** (checked 2026-11-14): `C_ChatInfo.InChatMessagingLockdown`, `C_FriendList.GetFriendInfo` / `GetFriendInfoByIndex`, `C_BattleNet.GetFriendGameAccountInfo`, `C_BattleNet.SendGameData` (Battle.net friends; the old `BNSendGameData` is only a deprecated wrapper on Forever, `Blizzard_DeprecatedBattleNet/Deprecated_BattleNet.lua`), `Ambiguate`. Presence in the source is not proof they behave as on Retail.
   - **Sender names:** Retail sends "Name-Realm"; Forever characters have first and last names, so the format of `sender` and of friends-list names must be checked in game before any friends/Custom matching.
+- [ ] **On Sale from shared prices** (Sylice, 2026-11-21): a price list received from the party or guild is checked against the On Sale searches (Manual mode) or everything (Full Auto) like a full scan, and finds from it show **who shared it and when that scan was made** ("Sylice's scan, 5 m ago"), so it's clear how old the price is. Shared prices can be stale or fake (see Trust): a find from them still gets the usual "check the AH" step before buying.
 
 ## Version 0.3: "On Sale" (Sylice, 2026-11-19; was "possibly 0.4")
 
@@ -192,6 +193,26 @@ Decided 2026-11-19 (Sylice): On Sale gets **its own searches and its own price h
 - To check in game (Sylice; not blocking the build):
   - **Idle logout:** WoW usually logs out after 30 minutes without input (Blizzard forum citing Wowpedia; nothing Forever-specific found). Whether addon searches count as activity is unknown: leave RapidFire running untouched for 35 minutes. Nothing will be built to fake input (ToS).
   - **Suffix text search:** type "of the Knight" in Blizzard's own AH search box; Auctionator passes the text to the server unchanged (`Source_ModernAH/Search/Mixins/DirectSearchProviderMixin.lua`), so whether suffixes match is the server's behaviour. If not, ProfitCraft searches the category without text and matches the names itself.
+
+### On Sale modes (planned, not built; Sylice, 2026-11-21)
+
+Replaces the 0.3.8 checkbox "Enable On Sale Finder (Experimental)" with a choice of three modes. Why (Sylice, after testing 0.3.0-0.3.7): judging the whole AH in every full scan produced most of the false finds (price drops, price discovery, thinly traded items); the user's own searches are predictable.
+
+| | **Off** (default) | **Manual** | **Full Auto** (experimental) |
+|---|---|---|---|
+| On Sale tab at the AH | no | yes | yes |
+| Scanning | none | automatic: the watch runs the user's searches, full scans are read | the same |
+| Alerts / finds | none | **only items the user's searches cover** (watch results, and full-scan listings that match a switched-on search) | every item on the AH (as in 0.3.8 with the checkbox on) |
+| Price history | not recorded | recorded (full scans and searches; percent-rule searches need it) | recorded |
+
+- "Covered by a search" for full-scan listings: matched against the search's text (name contains / exact), category (class/subclass), item level, required level and quality, as far as the scan data and loaded item data allow; listings that can't be matched yet are left to the watch.
+- **Quick check on opening the AH** (Sylice, 2026-11-21): in Manual and Full Auto, opening the AH runs **one pass** through the switched-on searches (one request a second, no pause between searches), then stops; **at most once a minute** (open, close, open again within a minute: no second pass). The continuous watch still starts only with the Start button (Sylice: not "starts by itself").
+- The 0.3.8 checkbox maps to: unticked -> Off, ticked -> Full Auto.
+
+### Discovery mode (future, bigger feature; Sylice, 2026-11-21)
+
+- Like Manual, fed by Full Auto's finds: the player reviews what Full Auto finds and, per item, **whitelists** it (alert on it from now on, like an entry in the manual list) or **blacklists** it (never alert on it again). Over time this teaches On Sale which items are worth watching.
+- Not designed yet. Questions for then: whitelist = a new search per item, or a separate list; blacklist per item, per item + suffix, or per category; where the review happens (the Finds list: right-click a find?); whether blacklisted items still record price history.
 
 ### Earlier On Sale notes (2026-11-14 / 11-17)
 

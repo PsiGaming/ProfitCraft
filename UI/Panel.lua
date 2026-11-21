@@ -19,8 +19,9 @@ local MODE_HELP = {
 }
 
 local BANNER_HEIGHT = 44
+local FILTER_HEIGHT = 24  -- the "Profitable only" row at the top of the list (Sylice, 2026-11-21)
 
-local frame, scrollBox, modeDropdown, statusText, toggleTab, banner
+local frame, scrollBox, modeDropdown, statusText, toggleTab, banner, profitableBox
 local UpdateToggleTab  -- defined below; used by the overview hooks in Create
 
 local function ShowRowTooltip(row)
@@ -175,7 +176,19 @@ end
 local function UpdateBanner(text)
   banner.text:SetText(text or "")
   banner:SetShown(text ~= nil)
-  scrollBox:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4, text and -(BANNER_HEIGHT + 8) or -4)
+  scrollBox:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4,
+    -FILTER_HEIGHT - (text and (BANNER_HEIGHT + 8) or 4))
+end
+
+-- The ranked list, without recipes that don't earn anything in this mode (loss, zero or no price) when "Profitable
+-- only" is ticked.
+local function Shown(list, field)
+  if not PC.db.settings.profitableOnly then return list end
+  local shown = {}
+  for _, result in ipairs(list) do
+    if result[field] and result[field] > 0 then shown[#shown + 1] = result end
+  end
+  return shown
 end
 
 function Panel:Refresh()
@@ -183,14 +196,17 @@ function Panel:Refresh()
   local mode = PC.db.settings.profitMode
   modeDropdown:GenerateMenu()
   local list = PC.Profit:GetRanked(mode)
+  local field = PC.Profit.PROFIT_FIELD[mode]
+  local shown = Shown(list, field)
+  profitableBox:SetChecked(PC.db.settings.profitableOnly)
+  profitableBox.count:SetText(PC.db.settings.profitableOnly and string.format("%d of %d", #shown, #list) or "")
   UpdateBanner(PriceWarning(list))
-  scrollBox:SetDataProvider(CreateDataProvider(list), ScrollBoxConstants.RetainScrollPosition)
+  scrollBox:SetDataProvider(CreateDataProvider(shown), ScrollBoxConstants.RetainScrollPosition)
   if not PC.Auctionator:IsAvailable() and not PC.Scan:GetSnapshot() then
     statusText:SetText("|cffff8888No AH prices yet: use the Full scan button at the AH.|r")
   elseif #list == 0 then
     statusText:SetText("Reading recipes...")
   else
-    local field = PC.Profit.PROFIT_FIELD[mode]
     local priced = 0
     for _, result in ipairs(list) do
       if result[field] then priced = priced + 1 end
@@ -268,10 +284,30 @@ local function Create()
   statusText = PC:CreateFooter(frame)
   scrollBox = PC:CreateScrollList(frame, ROW_HEIGHT, "panel row", InitRow)
 
-  -- Warning banner at the top of the list (Auctionator missing, no prices, old prices).
+  -- "Profitable only": hides recipes that lose money or have no price in the chosen mode.
+  profitableBox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+  profitableBox:SetSize(22, 22)
+  profitableBox:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4, -2)
+  profitableBox.Text:SetText("Profitable only")
+  profitableBox.Text:SetFontObject("GameFontHighlightSmall")
+  profitableBox.count = profitableBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  profitableBox.count:SetPoint("RIGHT", frame.Inset, "TOPRIGHT", -8, -13)
+  profitableBox:SetScript("OnClick", function(self)
+    PC:SetSetting("profitableOnly", self:GetChecked() and true or false)
+  end)
+  profitableBox:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Profitable only", 1, 1, 1)
+    GameTooltip:AddLine("Hide recipes that lose money or have no price yet, in the chosen mode (per craft, per stack "
+      .. "or disenchant).", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  profitableBox:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+  -- Warning banner at the top of the list (Auctionator missing, no prices, old prices), below the filter row.
   banner = CreateFrame("Frame", nil, frame)
-  banner:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4, -4)
-  banner:SetPoint("TOPRIGHT", frame.Inset, "TOPRIGHT", -4, -4)
+  banner:SetPoint("TOPLEFT", frame.Inset, "TOPLEFT", 4, -FILTER_HEIGHT - 4)
+  banner:SetPoint("TOPRIGHT", frame.Inset, "TOPRIGHT", -4, -FILTER_HEIGHT - 4)
   banner:SetHeight(BANNER_HEIGHT)
   local background = banner:CreateTexture(nil, "BACKGROUND")
   background:SetAllPoints()
@@ -407,5 +443,5 @@ PC:Listen("SETTINGS_CHANGED", function(key)
   if key == "staleDays" then Panel:Refresh() end
 end)
 PC:Listen("SETTINGS_CHANGED", function(key)
-  if key == "profitMode" then Panel:Refresh() end
+  if key == "profitMode" or key == "profitableOnly" then Panel:Refresh() end
 end)

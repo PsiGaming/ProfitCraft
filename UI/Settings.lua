@@ -22,8 +22,10 @@ local ONSALE_INTERVALS = { 5, 10, 15, 30, 60, 120 }  -- seconds
 local COLUMN_WIDTH = 340
 
 -- In display order. { page = "..." } starts a page (one page button each at the top), { title = "..." } a section
--- heading, { divider = true } a line. requires = "<setting>": greyed out while that setting is off.
+-- heading, { divider = true } a line. requires = function: greyed out while it returns false.
 -- Pages (Sylice, 2026-11-21): General / Crafting profit / On Sale, one column wide (small screens).
+local function OnSaleOn() return PC.db.settings.onSaleMode ~= "off" end
+
 local OPTIONS = {
   { page = "General" },
   { title = "INTERFACE" },
@@ -77,45 +79,57 @@ local OPTIONS = {
     help = "Adds the estimated disenchant value (average over many disenchants, priced at AH prices) and "
       .. "what the item can disenchant into to item tooltips. Not yet confirmed for Forever." },
   { page = "On Sale" },
-  { key = "onSaleEnabled", label = "Enable On Sale Finder (Experimental)",
-    help = "Finds listings far below their usual price: in every full scan, and with your own searches while the "
-      .. "watch runs. Off: no On Sale tab at the Auction House, no finds, alerts or price history. Still being "
-      .. "refined, so it is off by default." },
+  { key = "onSaleMode", label = "On Sale Finder",
+    help = "Finds listings far below their usual price. Opening the Auction House checks your searches once (at most "
+      .. "once a minute); Start on the On Sale panel keeps watching them.",
+    choices = {
+      { label = "Off", value = "off", help = "No On Sale tab at the Auction House, no finds, alerts or price history." },
+      { label = "Manual List", value = "manual",
+        help = "Alerts only for items your own searches cover: from the searches themselves, and from full scans." },
+      { label = "Full Auto (Experimental)", value = "auto",
+        help = "Every item on the Auction House in every full scan, plus your searches. Still being refined: expect "
+          .. "finds that aren't real sales." },
+    } },
   { title = "WHAT COUNTS AS ON SALE" },
-  { key = "onSaleGear", requires = "onSaleEnabled", slider = { values = GEAR_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+  { key = "onSaleGear", slider = { values = GEAR_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+    requires = OnSaleOn,
     label = "Single items (gear, recipes) on sale at",
     help = "A find needs a price at least this far below the item's usual price (the median of its last 7 daily "
       .. "prices). Example: 70% = at 30% of the usual price or less. Single items (gear, recipes, bags) need 3 days "
       .. "of ProfitCraft's own price history, and more than 3 listings that cheap means the price fell: no find." },
-  { key = "onSaleReagent", requires = "onSaleEnabled", slider = { values = REAGENT_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+  { key = "onSaleReagent", slider = { values = REAGENT_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+    requires = OnSaleOn,
     label = "Stackable goods on sale at",
     help = "The same for reagents, cloth, herbs and other stackable goods. Tiny amounts (under the \"ignore cheap "
       .. "amounts\" share above) never count." },
-  { key = "onSaleMinProfit", requires = "onSaleEnabled", slider = { values = MIN_PROFITS,
+  { key = "onSaleMinProfit", slider = { values = MIN_PROFITS,
     format = function(v) return v == 0 and "any" or PC:FormatMoney(v) end },
+    requires = OnSaleOn,
     label = "Minimum profit per find",
     help = "Finds earning less than this (usual price after the AH cut, minus what you'd pay) are not shown, so "
       .. "cheap items don't keep alerting you." },
-  { key = "onSaleMaxProfit", requires = "onSaleEnabled", slider = { values = MAX_PROFITS,
+  { key = "onSaleMaxProfit", slider = { values = MAX_PROFITS,
     format = function(v) return v == -1 and "Auto" or v == 0 and "Unlimited" or PC:FormatMoney(v) end },
+    requires = OnSaleOn,
     label = "Maximum profit per find",
     help = "Finds that would earn more than this are not shown: a price that far below usual is mostly a seller "
       .. "still finding the price (listed far too high before), not a sale. Auto: up to 1.5 times the gold you "
       .. "have. Fixed-price searches ignore it." },
   { title = "WATCH" },
-  { key = "onSaleInterval", requires = "onSaleEnabled", slider = { values = ONSALE_INTERVALS,
+  { key = "onSaleInterval", slider = { values = ONSALE_INTERVALS,
     format = function(v) return v >= 60 and (v / 60 .. " min") or (v .. " s") end },
+    requires = OnSaleOn,
     label = "Pause between two searches",
     help = "On Sale runs your searches one after another with this pause between them. Each search comes round "
       .. "every (number of searches x pause)." },
   { title = "ALERTS" },
-  { key = "onSaleSound", requires = "onSaleEnabled", label = "Sound on each new find",
+  { key = "onSaleSound", requires = OnSaleOn, label = "Sound on each new find",
     help = "Plays a sound when On Sale finds something new. To hear it while the game is in the background, turn "
       .. "on Blizzard's \"Sound in Background\" (Options > Audio)." },
-  { key = "onSaleGlow", requires = "onSaleEnabled", label = "Screen glow on each new find",
+  { key = "onSaleGlow", requires = OnSaleOn, label = "Screen glow on each new find",
     help = "A pulsing gold glow around the screen edges (Blizzard's low-health glow, in gold) after a new find, until "
       .. "you move the mouse over the Auction House or the On Sale panel." },
-  { key = "historyReminder", requires = "onSaleEnabled", label = "Remind me when price history is thin",
+  { key = "historyReminder", requires = OnSaleOn, label = "Remind me when price history is thin",
     help = "After a full scan, an orange chat line says when ProfitCraft has scanned on fewer than 3 of the last 7 "
       .. "days: gear, recipes and other single items need its own prices on 3 days before they can be finds." },
 }
@@ -180,18 +194,21 @@ end
 
 -- A dropdown choice is selected when ProfitCraft's setting matches and, where ProfitCraft draws nothing, when
 -- Blizzard's game setting matches too (that tells "Off" and "Blizzard only" apart).
+-- A plain dropdown (no game setting) selects by `value`.
 local function IsChoiceSelected(option, choice)
+  if not option.cvar then return PC.db.settings[option.key] == choice.value end
   if PC.db.settings[option.key] ~= choice.mode then return false end
   return choice.mode ~= "none" or C_CVar.GetCVarBool(option.cvar) == choice.cvarOn
 end
 
 local function SelectChoice(option, choice)
+  if not option.cvar then return PC:SetSetting(option.key, choice.value) end
   C_CVar.SetCVar(option.cvar, choice.cvarOn and "1" or "0")
   PC:SetSetting(option.key, choice.mode)
 end
 
 local function Available(option)
-  return not option.requires or PC.db.settings[option.requires] == true
+  return not option.requires or option.requires()
 end
 
 -- Makes the checkboxes, sliders and dropdowns reflect the saved settings (and Blizzard's, for mirrored ones); options

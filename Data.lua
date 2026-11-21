@@ -3,13 +3,14 @@
 
 local ADDON_NAME, PC = ...
 
-local DB_VERSION = 3
+local DB_VERSION = 4
 
 local DEFAULT_SETTINGS = {
   debug = false,        -- show errors in chat as they happen
   profitMode = "craft", -- side panel: "craft", "stack" (per full stack) or "disenchant" (craft, then disenchant)
   ahCut = 0.05,         -- share of the sale price the AH keeps (web sources: 5%; to confirm in game)
   panelShown = true,    -- side panel open next to the profession window
+  profitableOnly = false, -- side panel: list only recipes with a known profit above 0 (in the chosen mode)
   tooltipDisenchant = false, -- disenchant estimate line in item tooltips (off by default, as in Auctionator)
   freeSlots = "none",   -- ProfitCraft's free bag slot count: "none", "reagent" or "backpack" (UI/BagSpace.lua)
   staleDays = 2,        -- side panel warns when AH prices are this many days old; 0 = off
@@ -23,7 +24,8 @@ local DEFAULT_SETTINGS = {
   onSaleSound = true,   -- On Sale: sound on each new find
   onSaleGlow = true,    -- On Sale: screen glow on a new find until the mouse is over the AH or the On Sale panel
   summaryScanWarning = true,  -- raid-warning style notice when Auctionator runs a summary scan (Scan.lua)
-  onSaleEnabled = false,      -- On Sale Finder (experimental; Sylice tests it before it's on for everyone)
+  onSaleMode = "off",         -- On Sale Finder: "off", "manual" (alerts only for the user's searches) or "auto" (the
+                              -- whole AH, experimental); off by default (Sylice tests it before it's on for everyone)
   historyReminder = true,     -- On Sale: chat line after a full scan while price history is under 3 of 7 days
   recipesProfitMode = "stack",  -- Recipes panel at the AH: profit per "stack" or per "craft" (UI/AHRecipes.lua)
   recipesHideKnown = false,  -- Recipes panel at the AH: hide recipes the character knows (UI/AHRecipes.lua)
@@ -51,6 +53,15 @@ upgrades[3] = function(db)
     db.settings.summaryScanWarning = db.settings.scanWarning
     db.settings.historyReminder = db.settings.scanWarning
     db.settings.scanWarning = nil
+  end
+end
+
+-- 0.3.9: the On Sale Finder checkbox became a mode (Sylice, 2026-11-21): ticked -> Full Auto, unticked -> Off.
+upgrades[4] = function(db)
+  if type(db.settings) ~= "table" then return end
+  if db.settings.onSaleEnabled ~= nil then
+    db.settings.onSaleMode = db.settings.onSaleEnabled and "auto" or "off"
+    db.settings.onSaleEnabled = nil
   end
 end
 

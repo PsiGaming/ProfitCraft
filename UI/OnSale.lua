@@ -882,7 +882,7 @@ PC.AHTabs:Register({
   help = "Find listings far below their usual price: your searches while it runs, and every full scan.",
   panel = function() return panel end,
   count = function() return #OnSale:GetHits() end,
-  shown = function() return PC.db.settings.onSaleEnabled == true end,
+  shown = function() return OnSale:GetMode() ~= "off" end,
   open = function()
     if not panel then CreatePanel() end
     panel:Show()

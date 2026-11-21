@@ -103,7 +103,7 @@ local function Finish()
   PC:Send("SCAN_CHANGED")
   if r.collector and not r.collector.failed then PC:Call("On Sale scan", r.collector.Finish, r.collector) end
   PC:Call("scan days", function()
-    if not PC.db.settings.onSaleEnabled then return end  -- price history belongs to the On Sale Finder
+    if PC.OnSale:GetMode() == "off" then return end  -- price history belongs to the On Sale Finder
     PC.History:NoteScanDay()
     local days = PC.History:ScanDaysInWeek()
     if days < PC.History.MIN_DAYS and PC.db.settings.historyReminder then
@@ -118,7 +118,7 @@ end
 -- the game delivers incomplete (hasAllInfo false) is read again once its item data has loaded, as Auctionator
 -- does (Source_ModernAH/FullScan/Mixins/Frame.lua, ProcessBatch); everything else is used right away.
 local function ReadListing(r, index, retry)
-  local name, _, count, _, _, _, _, _, _, buyout, _, _, _, owner, ownerFull, _, itemID, hasAllInfo =
+  local name, _, count, quality, _, _, _, _, _, buyout, _, _, _, owner, ownerFull, _, itemID, hasAllInfo =
     C_AuctionHouse.GetReplicateItemInfo(index)
   if r.first and ((owner and owner:find(r.first, 1, true)) or (ownerFull and ownerFull:find(r.first, 1, true))) then
     r.ownForms[ownerFull or owner] = true
@@ -139,7 +139,7 @@ local function ReadListing(r, index, retry)
   local price = math.floor(buyout / count + 0.5)
   -- On Sale must never break the scan: its first error switches it off for this scan (and is logged).
   if r.collector and not r.collector.failed then
-    local ok, err = pcall(r.collector.Add, r.collector, index, itemID, price, count, name)
+    local ok, err = pcall(r.collector.Add, r.collector, index, itemID, price, count, name, quality)
     if not ok then
       r.collector.failed = true
       PC:ReportError("On Sale scan", err)
@@ -207,8 +207,8 @@ PC:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE", function()
   reading.own, reading.first = own, first
   reading.items, reading.ownForms, reading.ownSkipped = {}, {}, 0
   reading.pending, reading.pendingCount = {}, 0
-  -- On Sale's finds and price history only with the On Sale Finder switched on (Sylice, 2026-11-21: experimental).
-  reading.collector = PC.OnSale and PC.db.settings.onSaleEnabled and PC.OnSale:NewScanCollector() or nil
+  -- On Sale's finds and price history only with the On Sale Finder on (Manual or Full Auto; Sylice, 2026-11-21).
+  reading.collector = PC.OnSale and PC.OnSale:GetMode() ~= "off" and PC.OnSale:NewScanCollector() or nil
   ReadBatch()
 end)
 
