@@ -37,7 +37,8 @@ function AHTabs:Place(panel)
   panel:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", self:PanelOffset(), 0)
 end
 
-local entries = {}  -- { key, title, icon, help, open(), panel(), count() }, in order of registration
+local entries = {}  -- { key, title, icon, help, open(), panel(), count(), shown() }, in order of registration
+-- shown(): optional; false hides the tab (and closes its panel), e.g. On Sale while the On Sale Finder is off.
 local column
 
 function AHTabs:Register(entry)
@@ -112,14 +113,23 @@ local function Layout()
   if not column then return end
   local icon, frame = Sizes()
   local pitch = frame + GAP
-  column:SetSize(EDGE + frame + GAP, #column.tabs * pitch)
-  for index, tab in ipairs(column.tabs) do
-    tab:SetSize(icon, icon)
-    tab:ClearAllPoints()
-    tab:SetPoint("TOPLEFT", column, "TOPLEFT", EDGE + (frame - icon) / 2, -(index - 1) * pitch - (frame - icon) / 2)
-    tab.border:SetSize(frame, frame)
-    tab.badge:SetFontObject(icon >= 36 and "NumberFontNormal" or "NumberFontNormalSmall")
+  local index = 0
+  for _, tab in ipairs(column.tabs) do
+    local shown = not tab.entry.shown or tab.entry.shown()
+    tab:SetShown(shown)
+    if not shown then
+      local panel = tab.entry.panel()
+      if panel then panel:Hide() end
+    else
+      index = index + 1
+      tab:SetSize(icon, icon)
+      tab:ClearAllPoints()
+      tab:SetPoint("TOPLEFT", column, "TOPLEFT", EDGE + (frame - icon) / 2, -(index - 1) * pitch - (frame - icon) / 2)
+      tab.border:SetSize(frame, frame)
+      tab.badge:SetFontObject(icon >= 36 and "NumberFontNormal" or "NumberFontNormalSmall")
+    end
   end
+  column:SetSize(EDGE + frame + GAP, math.max(index, 1) * pitch)
   for _, entry in ipairs(entries) do
     local panel = entry.panel()
     if panel then AHTabs:Place(panel) end
@@ -135,7 +145,7 @@ local function CreateColumn()
 end
 
 PC:Listen("SETTINGS_CHANGED", function(key)
-  if key == "ahTabSize" then PC:Call("tab size", Layout) end
+  if key == "ahTabSize" or key == "onSaleEnabled" then PC:Call("tab layout", Layout) end
 end)
 
 PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()

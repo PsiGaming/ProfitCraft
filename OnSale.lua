@@ -30,6 +30,12 @@ local MANUAL_PAUSE = 30
 local MAX_RECHECK = 50       -- item keys per re-check of full-scan finds
 local MAX_SEARCHES = 30
 local GEAR_CLASSES = { [2] = true, [4] = true }  -- Enum.ItemClass Weapon, Armor
+-- Single items while their data isn't loaded: weapons, armour, bags and recipes (Enum.ItemClass Container 1, Recipe 9;
+-- Forever API docs). 0.3.0-0.3.7 counted unloaded recipes as stackable goods (Sylice, 2026-11-21: recipe "finds").
+local SINGLE_CLASSES = { [1] = true, [2] = true, [4] = true, [9] = true }
+-- A single item with more listings than this at or under its On Sale price is not on sale: the market price fell
+-- (Sylice, 2026-11-21: "20x recipes at 8g that used to sell for 40g"). Not for fixed-price searches.
+local MAX_CHEAP_LISTINGS = 3
 local QUALITY_FILTER_NAMES = { [0] = "PoorQuality", "CommonQuality", "UncommonQuality", "RareQuality", "EpicQuality",
   "LegendaryQuality", "ArtifactQuality" }
 
@@ -236,7 +242,7 @@ function OnSale:IsStackable(itemID)
   local stack = cached and select(8, C_Item.GetItemInfo(itemID))
   if stack then return stack > 1 end
   local classID = select(6, C_Item.GetItemInfoInstant(itemID))
-  return not GEAR_CLASSES[classID]
+  return not SINGLE_CLASSES[classID]
 end
 
 function OnSale:IsGear(itemID)
@@ -259,10 +265,13 @@ end
 -- percent or minimum profit). Returns { limit, fixed, minProfit, usual, source, days, net, stackable }, or nil when it
 -- can't be judged (a percent rule without a usual price). limit = highest price that counts (per item, or per unit
 -- of stackable goods); net = one sold at the usual price after the AH cut.
+-- Auctionator's history counts for stackable goods only: for single items (recipes, gear) its daily lows are mostly
+-- one seller's asking price (Sylice, 2026-11-21: "a pattern listed for 600g yesterday"); they need 3 days of
+-- ProfitCraft's own history.
 function OnSale:GetLimit(itemID, variant, search)
-  local gear = self:IsGear(itemID)
-  local usual, source, days = PC.History:GetUsual(itemID, variant, not gear)
-  local info = { usual = usual, source = source, days = days, stackable = self:IsStackable(itemID),
+  local stackable = self:IsStackable(itemID)
+  local usual, source, days = PC.History:GetUsual(itemID, variant, stackable)
+  local info = { usual = usual, source = source, days = days, stackable = stackable,
     net = usual and usual * (1 - Settings().ahCut) }
   if search and search.rule == "fixed" then
     if not (search.maxPrice and search.maxPrice > 0) then return nil end
@@ -273,6 +282,14 @@ function OnSale:GetLimit(itemID, variant, search)
   local percent = (search and search.percent) or (info.stackable and Settings().onSaleReagent or Settings().onSaleGear)
   info.limit = math.floor(usual * (100 - percent) / 100)  -- whole numbers: usual * (1 - 0.8) is 1999.99.. for 10000
   info.minProfit = (search and search.minProfit) or Settings().onSaleMinProfit
+  -- Maximum profit (nil = no limit). Auto: 1.5x the character's gold (Sylice, 2026-11-21: "up to 50% above what the
+  -- user's gold balance is").
+  local maxProfit = Settings().onSaleMaxProfit
+  if maxProfit == -1 then
+    info.maxProfit = math.floor(GetMoney() * 1.5)
+  elseif maxProfit and maxProfit > 0 then
+    info.maxProfit = maxProfit
+  end
   return info
 end
 
@@ -281,9 +298,12 @@ local function Profit(limit, quantity, cost)
   return limit.net and (limit.net * quantity - cost) or nil
 end
 
--- A fixed price counts as chosen; a percent rule also needs its minimum profit.
+-- A fixed price counts as chosen; a percent rule also needs its minimum profit, and no more than the maximum: a
+-- bigger "profit" is a price still being found, not a sale (Sylice, 2026-11-21).
 local function Worth(limit, profit)
-  return limit.fixed or (profit ~= nil and profit >= limit.minProfit)
+  if limit.fixed then return true end
+  if profit == nil or profit < limit.minProfit then return false end
+  return limit.maxProfit == nil or profit <= limit.maxProfit
 end
 
 -- "at or under 30s" / "65% below usual (setting), min profit 50s"
@@ -464,6 +484,15 @@ local function QueueCheck(itemID, name, from, search)
   queue[#queue + 1] = { kind = "verify", itemID = itemID, name = name, from = from, search = search }
 end
 
+-- A single item listed more than MAX_CHEAP_LISTINGS times: its listings are counted (one item search) before it counts.
+local function QueueItemCheck(itemKey, variant, name, from, search)
+  for _, task in ipairs(queue) do
+    if task.itemID == itemKey.itemID and task.variant == variant then return end
+  end
+  queue[#queue + 1] = { kind = "verifyItem", itemID = itemKey.itemID, itemKey = itemKey, variant = variant, name = name,
+    from = from, search = search }
+end
+
 -- Reads the results of a finished browse request (a search, or a re-check of earlier finds).
 local function ReadBrowse(task)
   local search = task.search
@@ -510,6 +539,9 @@ local function ReadBrowse(task)
           if limit.stackable then
             -- unchanged price: keep the find; else count the units first
             if not (hit and hit.price == row.minPrice) then QueueCheck(itemID, name, from, rule) end
+          elseif not limit.fixed and (row.totalQuantity or 0) > MAX_CHEAP_LISTINGS then
+            -- more listed than may be cheap: count those at or under the price first
+            if not (hit and hit.price == row.minPrice) then QueueItemCheck(itemKey, variant, name, from, rule) end
           else
             local profit = Profit(limit, 1, row.minPrice)
             if Worth(limit, profit) then
@@ -571,6 +603,8 @@ local function StartTask(task)
   end)
   if task.kind == "verify" then
     Send(C_AuctionHouse.SendSearchQuery, C_AuctionHouse.MakeItemKey(task.itemID), Sorts(), true)
+  elseif task.kind == "verifyItem" then
+    Send(C_AuctionHouse.SendSearchQuery, task.itemKey, Sorts(), true)
   elseif task.keys then
     local list = {}
     for _, hit in pairs(hits) do
@@ -677,8 +711,51 @@ for _, event in ipairs({ "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_SEARCH_R
   PC:RegisterEvent(event, ReadCommodity)
 end
 
+-- Finishes the check of a single item from its listings: { buyout, ... } of other sellers.
+function OnSale:CheckItem(task, prices)
+  local key = PC.History:Key(task.itemID, task.variant)
+  local limit = self:GetLimit(task.itemID, task.variant, task.search)
+  local cheap, cheapest = 0, nil
+  for _, price in ipairs(prices) do
+    if limit and price <= limit.limit then
+      cheap = cheap + 1
+      cheapest = cheapest and math.min(cheapest, price) or price
+    end
+  end
+  local profit = cheapest and Profit(limit, 1, cheapest)
+  local real = cheap > 0 and cheap <= MAX_CHEAP_LISTINGS and cheap <= #prices * MARKET_SHARE
+  if real and Worth(limit, profit) then
+    self:AddHit({ key = key, itemID = task.itemID, variant = task.variant, itemKey = task.itemKey,
+      name = task.name or PC.Items:GetName(task.itemID), price = cheapest, quantity = 1, cost = cheapest,
+      profit = profit, usual = limit.usual, source = limit.source, limit = limit.limit, fixed = limit.fixed,
+      from = task.from })
+  else
+    self:RemoveHit(key)
+  end
+end
+
+local function ReadItemListings(itemKey)
+  local task = current
+  if not (task and task.kind == "verifyItem" and itemKey and itemKey.itemID == task.itemID) then return end
+  local prices = {}
+  for i = 1, C_AuctionHouse.GetNumItemSearchResults(task.itemKey) or 0 do
+    local result = C_AuctionHouse.GetItemSearchResultInfo(task.itemKey, i)
+    if result and result.buyoutAmount and not result.containsOwnerItem then prices[#prices + 1] = result.buyoutAmount end
+  end
+  PC:Call("on sale check", OnSale.CheckItem, OnSale, task, prices)
+  EndTask(task)
+end
+
+for _, event in ipairs({ "ITEM_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_ADDED" }) do
+  PC:RegisterEvent(event, ReadItemListings)
+end
+
 function OnSale:Start()
   if running then return end
+  if not Settings().onSaleEnabled then
+    PC:Print("On Sale: the On Sale Finder is off (Settings > On Sale).")
+    return
+  end
   if #Active() == 0 then
     PC:Print("On Sale: switch on at least one search first.")
     return
@@ -750,6 +827,14 @@ local function HookSearches()
 end
 
 PC:RegisterEvent("AUCTION_HOUSE_SHOW", HookSearches)
+
+-- Switched off: stop the watch and drop the finds.
+PC:Listen("SETTINGS_CHANGED", function(key, value)
+  if key == "onSaleEnabled" and not value then
+    OnSale:Stop()
+    ClearHits()
+  end
+end)
 
 PC:RegisterEvent("AUCTION_HOUSE_CLOSED", function()
   OnSale:Stop()
@@ -824,7 +909,8 @@ function Collector:Finish()
         real = entry.cheap * 100 >= Settings().crumbPercent * entry.units and entry.cheap <= entry.units * MARKET_SHARE
       else
         quantity, cost = 1, entry.cheapest
-        real = entry.listings < 3 or entry.cheapListings <= entry.listings * MARKET_SHARE
+        real = entry.cheapListings <= MAX_CHEAP_LISTINGS
+          and (entry.listings < 3 or entry.cheapListings <= entry.listings * MARKET_SHARE)
       end
       local profit = Profit(limit, quantity, cost)
       if real and Worth(limit, profit) then

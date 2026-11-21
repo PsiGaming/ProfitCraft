@@ -1,5 +1,5 @@
 -- ProfitCraft: settings
--- One list of options, shown in two places built from it:
+-- One list of options in three pages (General, Crafting profit, On Sale), shown in two places built from it:
 --   * ProfitCraft's own movable window (/pcraft settings, the side panel's "Settings" button). Closing it just
 --     closes it; it never goes through Blizzard's settings panel, whose close always reopens the game menu
 --     (Forever source: SettingsPanelMixin:TransitionBackOpeningPanel -> ToggleGameMenu).
@@ -17,27 +17,19 @@ for size = 24, 44, 4 do TAB_SIZES[#TAB_SIZES + 1] = size end
 local GEAR_DISCOUNTS = { 50, 55, 60, 65, 70, 75, 80, 85, 90 }
 local REAGENT_DISCOUNTS = { 40, 45, 50, 55, 60, 65, 70, 75 }
 local MIN_PROFITS = { 0, 1000, 2500, 5000, 10000, 25000, 50000, 100000 }  -- copper
+local MAX_PROFITS = { -1, 50000, 100000, 200000, 500000, 1000000, 0 }  -- copper; -1 = Auto, 0 = unlimited
 local ONSALE_INTERVALS = { 5, 10, 15, 30, 60, 120 }  -- seconds
 local COLUMN_WIDTH = 340
 
--- In display order; { divider = true } draws a line between sections, { title = "..." } a section heading,
--- { column = true } starts the next column.
--- A slider with `values` steps through that list; without, through whole numbers from min to max.
+-- In display order. { page = "..." } starts a page (one page button each at the top), { title = "..." } a section
+-- heading, { divider = true } a line. requires = "<setting>": greyed out while that setting is off.
+-- Pages (Sylice, 2026-11-21): General / Crafting profit / On Sale, one column wide (small screens).
 local OPTIONS = {
-  { title = "PRICES" },
-  { key = "staleDays", slider = { min = 0, max = 4 }, label = "Warn when AH prices are older than",
-    help = "The side panel shows a banner asking you to scan the Auction House with Auctionator once prices "
-      .. "are this old. Off hides that warning (the \"Auctionator is required\" and \"No AH prices yet\" "
-      .. "warnings still show)." },
-  { key = "crumbPercent", slider = { values = CRUMB_VALUES, format = function(v) return v .. "% of units listed" end },
-    label = "Ignore cheap amounts below (stackable items)",
-    help = "Price levels holding less than this share of all units listed are ignored for reagent costs and sale "
-      .. "prices: on a busy Auction House they're gone before you can buy them. Uses ProfitCraft's scan data "
-      .. "(Auctionator's detailed scan, or ProfitCraft's own full scan)." },
-  { key = "tooltipDisenchant", label = "Disenchant estimate in item tooltips",
-    help = "Adds the estimated disenchant value (average over many disenchants, priced at AH prices) and "
-      .. "what the item can disenchant into to item tooltips. Not yet confirmed for Forever." },
-  { divider = true },
+  { page = "General" },
+  { title = "INTERFACE" },
+  { key = "moneyWindow", label = "Currencies bar",
+    help = "A small movable bar with your money and up to 5 currencies of your choice. Right-click it to add "
+      .. "or remove currencies, lock its position, change its background or hide it. Also: /pcraft money." },
   -- One choice for both counts: Blizzard's own (game setting displayFreeBagSlots, the switch behind Blizzard's
   -- "Show Free Bag Space" in Options > Interface) and ProfitCraft's split (setting freeSlots, UI/BagSpace.lua).
   { key = "freeSlots", cvar = "displayFreeBagSlots", label = "Free bag slots",
@@ -56,55 +48,83 @@ local OPTIONS = {
           .. "Blizzard's own option stays on underneath, so its count comes back if ProfitCraft is "
           .. "disabled or removed." },
     } },
-  { divider = true },
-  { key = "moneyWindow", label = "Currencies bar",
-    help = "A small movable bar with your money and up to 5 currencies of your choice. Right-click it to add "
-      .. "or remove currencies, lock its position, change its background or hide it. Also: /pcraft money." },
-  { divider = true },
+  { title = "AUCTION HOUSE" },
+  { key = "ahTabSize", slider = { values = TAB_SIZES, format = function(v) return v .. " px" end },
+    label = "Size of the tabs at the Auction House",
+    help = "The RapidFire, On Sale and Recipes tabs on the Auction House window's right edge. They stay stacked without "
+      .. "overlapping, and the panels open to their right." },
+  { key = "crumbPercent", slider = { values = CRUMB_VALUES, format = function(v) return v .. "% of units listed" end },
+    label = "Ignore cheap amounts below (stackable items)",
+    help = "Price levels holding less than this share of all units listed are ignored for reagent costs and sale "
+      .. "prices: on a busy Auction House they're gone before you can buy them. Uses ProfitCraft's scan data "
+      .. "(Auctionator's detailed scan, or ProfitCraft's own full scan)." },
+  { key = "summaryScanWarning", label = "Warn when Auctionator runs a summary scan",
+    help = "When Auctionator runs its quick SUMMARY scan, a raid-warning style message and an orange chat line say "
+      .. "how to switch it to its detailed scan, which ProfitCraft needs for exact reagent costs and On Sale. Never "
+      .. "shown on just opening the Auction House." },
+  { title = "TROUBLESHOOTING" },
   { key = "debug", label = "Debug mode: show errors in chat",
     help = "Errors are always logged (/pcraft errors). With debug mode on they are also printed in chat as "
       .. "they happen." },
-  { column = true },
-  { title = "ON SALE" },
-  { key = "onSaleGear", slider = { values = GEAR_DISCOUNTS, format = function(v) return v .. "% below usual" end },
-    label = "Gear and other single items on sale at",
+  { page = "Crafting profit" },
+  { title = "PRICES" },
+  { key = "staleDays", slider = { min = 0, max = 4 }, label = "Warn when AH prices are older than",
+    help = "The side panel shows a banner asking you to scan the Auction House with Auctionator once prices "
+      .. "are this old. Off hides that warning (the \"Auctionator is required\" and \"No AH prices yet\" "
+      .. "warnings still show)." },
+  { title = "TOOLTIPS" },
+  { key = "tooltipDisenchant", label = "Disenchant estimate in item tooltips",
+    help = "Adds the estimated disenchant value (average over many disenchants, priced at AH prices) and "
+      .. "what the item can disenchant into to item tooltips. Not yet confirmed for Forever." },
+  { page = "On Sale" },
+  { key = "onSaleEnabled", label = "Enable On Sale Finder (Experimental)",
+    help = "Finds listings far below their usual price: in every full scan, and with your own searches while the "
+      .. "watch runs. Off: no On Sale tab at the Auction House, no finds, alerts or price history. Still being "
+      .. "refined, so it is off by default." },
+  { title = "WHAT COUNTS AS ON SALE" },
+  { key = "onSaleGear", requires = "onSaleEnabled", slider = { values = GEAR_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+    label = "Single items (gear, recipes) on sale at",
     help = "A find needs a price at least this far below the item's usual price (the median of its last 7 daily "
-      .. "prices). Example: 65% = at 35% of the usual price or less." },
-  { key = "onSaleReagent", slider = { values = REAGENT_DISCOUNTS, format = function(v) return v .. "% below usual" end },
+      .. "prices). Example: 70% = at 30% of the usual price or less. Single items (gear, recipes, bags) need 3 days "
+      .. "of ProfitCraft's own price history, and more than 3 listings that cheap means the price fell: no find." },
+  { key = "onSaleReagent", requires = "onSaleEnabled", slider = { values = REAGENT_DISCOUNTS, format = function(v) return v .. "% below usual" end },
     label = "Stackable goods on sale at",
     help = "The same for reagents, cloth, herbs and other stackable goods. Tiny amounts (under the \"ignore cheap "
       .. "amounts\" share above) never count." },
-  { key = "onSaleMinProfit", slider = { values = MIN_PROFITS,
+  { key = "onSaleMinProfit", requires = "onSaleEnabled", slider = { values = MIN_PROFITS,
     format = function(v) return v == 0 and "any" or PC:FormatMoney(v) end },
     label = "Minimum profit per find",
     help = "Finds earning less than this (usual price after the AH cut, minus what you'd pay) are not shown, so "
       .. "cheap items don't keep alerting you." },
-  { key = "onSaleInterval", slider = { values = ONSALE_INTERVALS,
+  { key = "onSaleMaxProfit", requires = "onSaleEnabled", slider = { values = MAX_PROFITS,
+    format = function(v) return v == -1 and "Auto" or v == 0 and "Unlimited" or PC:FormatMoney(v) end },
+    label = "Maximum profit per find",
+    help = "Finds that would earn more than this are not shown: a price that far below usual is mostly a seller "
+      .. "still finding the price (listed far too high before), not a sale. Auto: up to 1.5 times the gold you "
+      .. "have. Fixed-price searches ignore it." },
+  { title = "WATCH" },
+  { key = "onSaleInterval", requires = "onSaleEnabled", slider = { values = ONSALE_INTERVALS,
     format = function(v) return v >= 60 and (v / 60 .. " min") or (v .. " s") end },
     label = "Pause between two searches",
     help = "On Sale runs your searches one after another with this pause between them. Each search comes round "
       .. "every (number of searches x pause)." },
-  { key = "onSaleSound", label = "Sound on each new find",
+  { title = "ALERTS" },
+  { key = "onSaleSound", requires = "onSaleEnabled", label = "Sound on each new find",
     help = "Plays a sound when On Sale finds something new. To hear it while the game is in the background, turn "
       .. "on Blizzard's \"Sound in Background\" (Options > Audio)." },
-  { key = "scanWarning", label = "Warn about summary scans and thin history",
-    help = "When Auctionator runs its quick SUMMARY scan, a raid-warning style message and an orange chat line say "
-      .. "that On Sale needs Auctionator's detailed scan. After a full scan, a chat line says when you've scanned on "
-      .. "fewer than 3 of the last 7 days. Never shown on just opening the Auction House." },
-  { key = "onSaleGlow", label = "Screen glow on each new find",
+  { key = "onSaleGlow", requires = "onSaleEnabled", label = "Screen glow on each new find",
     help = "A pulsing gold glow around the screen edges (Blizzard's low-health glow, in gold) after a new find, until "
       .. "you move the mouse over the Auction House or the On Sale panel." },
-  { divider = true },
-  { key = "ahTabSize", slider = { values = TAB_SIZES, format = function(v) return v .. " px" end },
-    label = "Size of the tabs at the Auction House",
-    help = "The RapidFire and On Sale tabs on the Auction House window's right edge. They stay stacked without "
-      .. "overlapping, and the panels open to their right." },
+  { key = "historyReminder", requires = "onSaleEnabled", label = "Remind me when price history is thin",
+    help = "After a full scan, an orange chat line says when ProfitCraft has scanned on fewer than 3 of the last 7 "
+      .. "days: gear, recipes and other single items need its own prices on 3 days before they can be finds." },
 }
 
 local ROW_SPACING = 30
 local SLIDER_ROWS = 2     -- a slider or dropdown takes two rows: its label, then the control
 local DIVIDER_ROWS = 0.5  -- a divider line takes half a row
 local TITLE_ROWS = 0.8    -- a section heading
+local PAGE_BUTTONS = 32   -- height of the page buttons' row
 
 local function RowsUsed(option)
   if option.divider then return DIVIDER_ROWS end
@@ -112,17 +132,17 @@ local function RowsUsed(option)
   return (option.slider or option.choices) and SLIDER_ROWS or 1
 end
 
--- Rows of the tallest column, and the number of columns.
+-- Rows of the tallest page.
 local function TotalRows()
-  local rows, tallest, columns = 0, 0, 1
+  local rows, tallest = 0, 0
   for _, option in ipairs(OPTIONS) do
-    if option.column then
-      tallest, rows, columns = math.max(tallest, rows), 0, columns + 1
+    if option.page then
+      tallest, rows = math.max(tallest, rows), 0
     else
       rows = rows + RowsUsed(option)
     end
   end
-  return math.max(tallest, rows), columns
+  return math.max(tallest, rows)
 end
 
 local function DaysText(value)
@@ -170,10 +190,23 @@ local function SelectChoice(option, choice)
   PC:SetSetting(option.key, choice.mode)
 end
 
--- Makes the checkboxes, sliders and dropdowns reflect the saved settings (and Blizzard's, for mirrored ones).
+local function Available(option)
+  return not option.requires or PC.db.settings[option.requires] == true
+end
+
+-- Makes the checkboxes, sliders and dropdowns reflect the saved settings (and Blizzard's, for mirrored ones); options
+-- whose switch is off are greyed out.
 local function Sync(page)
-  for option, box in pairs(page.checkboxes) do box:SetChecked(GetValue(option)) end
-  for option, slider in pairs(page.sliders) do slider:SetValue(SliderPosition(option)) end
+  for option, box in pairs(page.checkboxes) do
+    box:SetChecked(GetValue(option))
+    box:SetEnabled(Available(option))
+    box.Text:SetFontObject(Available(option) and "GameFontHighlight" or "GameFontDisable")
+  end
+  for option, slider in pairs(page.sliders) do
+    slider:SetValue(SliderPosition(option))
+    slider:SetEnabled(Available(option))
+    slider.label:SetFontObject(Available(option) and "GameFontHighlight" or "GameFontDisable")
+  end
   for _, dropdown in pairs(page.dropdowns) do dropdown:GenerateMenu() end
 end
 
@@ -209,6 +242,7 @@ local function BuildSlider(page, option, x, y)
   end, page)
   slider.Slider:HookScript("OnEnter", function(self) ShowHelp(self, option) end)
   slider.Slider:HookScript("OnLeave", function() GameTooltip:Hide() end)
+  slider.label = label
   return slider
 end
 
@@ -246,19 +280,40 @@ local function BuildCheckbox(page, option, x, y)
   end)
   box:SetScript("OnEnter", function(self) ShowHelp(self, option) end)
   box:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  box:SetMotionScriptsWhileDisabled(true)  -- help still shows while greyed out
   return box
 end
 
--- Builds one settings page (checkboxes, sliders and dropdowns) inside `page`, starting at (x, y) from its top left.
-local function BuildPage(page, x, y)
-  page.checkboxes, page.sliders, page.dropdowns = {}, {}, {}
-  local row, left = 0, x
+-- Shows one page of a settings frame; its page button stays lit.
+local function ShowPage(container, index)
+  container.current = index
+  for i, frame in ipairs(container.pageFrames) do
+    frame:SetShown(i == index)
+    if i == index then container.pageButtons[i]:LockHighlight() else container.pageButtons[i]:UnlockHighlight() end
+  end
+end
+
+-- Builds the settings (page buttons, then each page's checkboxes, sliders and dropdowns) inside `container`, starting
+-- at (x, y) from its top left.
+local function BuildPage(container, x, y)
+  container.checkboxes, container.sliders, container.dropdowns = {}, {}, {}
+  container.pageFrames, container.pageButtons = {}, {}
+  local page, row = container, 0
   for _, option in ipairs(OPTIONS) do
-    local rowY = y - row * ROW_SPACING
-    row = row + (option.column and 0 or RowsUsed(option))
-    x = left
-    if option.column then
-      left, row = left + COLUMN_WIDTH, 0
+    local rowY = y - PAGE_BUTTONS - row * ROW_SPACING
+    row = row + (option.page and 0 or RowsUsed(option))
+    if option.page then
+      local index = #container.pageFrames + 1
+      page = CreateFrame("Frame", nil, container)
+      page:SetAllPoints()
+      container.pageFrames[index] = page
+      local button = CreateFrame("Button", nil, container, "UIPanelButtonTemplate")
+      button:SetSize(110, 22)
+      button:SetPoint("TOPLEFT", x + (index - 1) * 114, y)
+      button:SetText(option.page)
+      button:SetScript("OnClick", function() ShowPage(container, index) end)
+      container.pageButtons[index] = button
+      row = 0
     elseif option.title then
       local heading = page:CreateFontString(nil, "OVERLAY", "GameFontNormal")
       heading:SetPoint("TOPLEFT", x + 4, rowY - 4)
@@ -270,15 +325,16 @@ local function BuildPage(page, x, y)
       line:SetWidth(300)
       line:SetPoint("TOPLEFT", x + 4, rowY - ROW_SPACING * DIVIDER_ROWS / 2)
     elseif option.slider then
-      page.sliders[option] = BuildSlider(page, option, x, rowY)
+      container.sliders[option] = BuildSlider(page, option, x, rowY)
     elseif option.choices then
-      page.dropdowns[option] = BuildDropdown(page, option, x, rowY)
+      container.dropdowns[option] = BuildDropdown(page, option, x, rowY)
     else
-      page.checkboxes[option] = BuildCheckbox(page, option, x, rowY)
+      container.checkboxes[option] = BuildCheckbox(page, option, x, rowY)
     end
   end
-  page:HookScript("OnShow", Sync)
-  pages[#pages + 1] = page
+  ShowPage(container, 1)
+  container:HookScript("OnShow", Sync)
+  pages[#pages + 1] = container
 end
 
 -- "Create Profit Macro": a general (account-wide) macro "PCraft": left-click /pcraft, right-click the settings.
@@ -353,9 +409,8 @@ local function CreateMacroButton(parent)
 end
 
 local function CreateWindowPage()
-  local rows, columns = TotalRows()
-  window = PC:CreateWindow("ProfitCraftSettings", UIParent, 20 + columns * COLUMN_WIDTH, 96 + rows * ROW_SPACING,
-    "ProfitCraft Settings", { movable = true })
+  window = PC:CreateWindow("ProfitCraftSettings", UIParent, 20 + COLUMN_WIDTH, 96 + PAGE_BUTTONS
+    + TotalRows() * ROW_SPACING, "ProfitCraft Settings", { movable = true })
   local page = CreateFrame("Frame", nil, window.Inset)
   page:SetAllPoints()
   BuildPage(page, 8, -6)

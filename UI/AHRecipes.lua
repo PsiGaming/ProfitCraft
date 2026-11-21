@@ -14,6 +14,9 @@
 -- * Profit: the same calculation as the recipe tooltip (Profit:Evaluate); recipe details are readable for the
 --   character's own professions without the profession window (PsiLab, 2026-11-14).
 -- * Clicking a row opens On Sale's buy dialog for the cheapest listing at or under the listed price.
+-- * Profit per stack (default) or per craft (setting recipesProfitMode, Sylice 2026-11-21): per stack is the profit of
+--   crafting one full stack of the product, as the profession window's "Per stack". The % and "pays off" (in crafts)
+--   don't change with the mode.
 
 local _, PC = ...
 
@@ -35,7 +38,7 @@ local running, current, queue, generation = false, nil, {}, 0
 local status = "Press Scan recipes."
 local sortKey, sortDescending = "profit", true
 
-local panel, list, scanButton, statusText, hideKnown, headers
+local panel, list, scanButton, statusText, hideKnown, headers, modeDropdown
 
 ---------------------------------------------------------------------------
 -- Data
@@ -80,6 +83,7 @@ local function Evaluate(row)
   row.icon = PC.Items:GetIcon(row.itemID)
   row.recipeID = row.recipeID or AHRecipes:RecipeOf(row.itemID)
   row.profit, row.cost, row.percent, row.payoff, row.bound, row.state = nil, nil, nil, nil, nil, nil
+  row.profitStack, row.stackSize = nil, nil
   if not row.recipeID then
     row.state = "unknown"
     return
@@ -96,6 +100,7 @@ local function Evaluate(row)
       row.bound = true
     elseif result.profitCraft then
       row.profit = result.profitCraft
+      row.profitStack, row.stackSize = result.profitStack, result.stackSize
       if result.cost and result.cost > 0 then row.percent = row.profit / result.cost * 100 end
       if row.profit > 0 then row.payoff = math.ceil(row.price / row.profit) end
     else
@@ -116,10 +121,18 @@ function AHRecipes:Evaluate()
 end
 
 -- Rows in display order: the chosen column, unknown values last.
+local function StackMode() return PC.db.settings.recipesProfitMode ~= "craft" end
+
+-- The profit shown: per stack or per craft.
+function AHRecipes:ShownProfit(row)
+  if StackMode() then return row.profitStack or row.profit end
+  return row.profit
+end
+
 local SORT_VALUE = {
   name = function(row) return row.name end,
   price = function(row) return row.price end,
-  profit = function(row) return row.profit end,
+  profit = function(row) return AHRecipes:ShownProfit(row) end,
   percent = function(row) return row.percent end,
   payoff = function(row) return row.payoff end,
 }
@@ -304,16 +317,21 @@ end)
 ---------------------------------------------------------------------------
 
 local COLUMNS = {
-  { key = "name", label = "Recipe", x = 4, width = 186 },
-  { key = "price", label = "AH price", x = 190, width = 76, right = true },
-  { key = "profit", label = "Profit / craft", x = 266, width = 84, right = true },
+  { key = "name", label = "Recipe", x = 4, width = 170 },
+  { key = "price", label = "AH price", x = 174, width = 76, right = true },
+  { key = "profit", label = "Profit / stack", x = 250, width = 100, right = true },
   { key = "percent", label = "%", x = 350, width = 46, right = true },
   { key = "payoff", label = "Pays off", x = 396, width = 60, right = true },
 }
 local GREY = "|cff888888"
 
 local function ProfitText(row)
-  if row.profit then return PC:FormatProfit(row.profit) end
+  local shown = AHRecipes:ShownProfit(row)
+  if shown then
+    local size = row.stackSize or 1
+    local prefix = StackMode() and size > 1 and (GREY .. "x" .. size .. "|r  ") or ""
+    return prefix .. PC:FormatProfit(shown)
+  end
   if row.bound then return GREY .. "BoP|r" end
   if row.state == "noproduct" then return GREY .. "no item|r" end
   if row.state == "noprice" then return GREY .. "no price|r" end
@@ -387,6 +405,9 @@ local function Refresh()
   if not (panel and panel:IsShown()) then return end
   list:SetDataProvider(CreateDataProvider(AHRecipes:GetRows()), ScrollBoxConstants.RetainScrollPosition)
   local key, descending = AHRecipes:GetSort()
+  headers[3].column.label = StackMode() and "Profit / stack" or "Profit / craft"
+  headers[3]:SetText(headers[3].column.label)
+  modeDropdown:GenerateMenu()
   -- The AH's own sort arrow, flipped the way Blizzard's headers flip it (AuctionHouseTableHeaderStringMixin:
   -- SetArrowState: normal order = texture upside down).
   for _, header in ipairs(headers) do
@@ -432,7 +453,7 @@ local function CreatePanel()
   end
   local area = CreateFrame("Frame", nil, inset)
   area:SetPoint("TOPLEFT", 0, -22)
-  area:SetPoint("BOTTOMRIGHT", 0, 32)
+  area:SetPoint("BOTTOMRIGHT", 0, 52)
   list = PC:CreateScrollList(panel, ROW_HEIGHT, "recipes row", InitRow, area)
 
   scanButton = CreateFrame("Button", nil, inset, "UIPanelButtonTemplate")
@@ -443,9 +464,22 @@ local function CreatePanel()
       if AHRecipes:IsRunning() then AHRecipes:Stop() else AHRecipes:Start() end
     end)
   end)
+  -- Per stack / per craft, as the profession window's mode dropdown (WowStyle1DropdownTemplate, UI/Panel.lua).
+  modeDropdown = CreateFrame("DropdownButton", nil, inset, "WowStyle1DropdownTemplate")
+  modeDropdown:SetWidth(110)
+  modeDropdown:SetPoint("BOTTOMLEFT", 8, 8)
+  modeDropdown:SetupMenu(function(_, root)
+    for _, mode in ipairs({ { "stack", "Per stack" }, { "craft", "Per craft" } }) do
+      root:CreateRadio(mode[2], function() return (PC.db.settings.recipesProfitMode or "stack") == mode[1] end,
+        function()
+          PC:SetSetting("recipesProfitMode", mode[1])
+          Changed()
+        end)
+    end
+  end)
   hideKnown = CreateFrame("CheckButton", nil, inset, "UICheckButtonTemplate")
   hideKnown:SetSize(22, 22)
-  hideKnown:SetPoint("BOTTOMLEFT", 6, 8)
+  hideKnown:SetPoint("LEFT", modeDropdown, "RIGHT", 10, 0)
   hideKnown.Text:SetText("Hide known")
   hideKnown.Text:SetFontObject("GameFontHighlightSmall")
   hideKnown:SetScript("OnClick", function(self)
@@ -453,8 +487,8 @@ local function CreatePanel()
     Refresh()
   end)
   statusText = inset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  statusText:SetPoint("LEFT", hideKnown, "RIGHT", 80, 0)
-  statusText:SetPoint("RIGHT", scanButton, "LEFT", -8, 0)
+  statusText:SetPoint("BOTTOMLEFT", 10, 36)
+  statusText:SetPoint("RIGHT", -10, 0)
   statusText:SetJustifyH("LEFT")
   statusText:SetWordWrap(false)
   panel:HookScript("OnShow", Refresh)

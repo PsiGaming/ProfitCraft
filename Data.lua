@@ -3,7 +3,7 @@
 
 local ADDON_NAME, PC = ...
 
-local DB_VERSION = 2
+local DB_VERSION = 3
 
 local DEFAULT_SETTINGS = {
   debug = false,        -- show errors in chat as they happen
@@ -15,13 +15,17 @@ local DEFAULT_SETTINGS = {
   staleDays = 2,        -- side panel warns when AH prices are this many days old; 0 = off
   moneyWindow = false,  -- currencies bar shown (UI/MoneyWindow.lua)
   crumbPercent = 1,     -- stackable items: price levels under this % of all units listed are ignored (Prices.lua)
-  onSaleGear = 65,      -- On Sale: gear is on sale this many % below its usual price (OnSale.lua)
-  onSaleReagent = 40,   -- On Sale: stackable goods, % below the usual price
+  onSaleGear = 70,      -- On Sale: single items (gear, recipes) on sale this many % below their usual price (OnSale.lua)
+  onSaleReagent = 45,   -- On Sale: stackable goods, % below the usual price
   onSaleMinProfit = 5000, -- On Sale: a find must earn at least this much (copper) after the AH cut
+  onSaleMaxProfit = -1, -- On Sale: ...and at most this much (copper); -1 = Auto (1.5x the character's gold), 0 = no limit
   onSaleInterval = 10,  -- On Sale: seconds between two searches
   onSaleSound = true,   -- On Sale: sound on each new find
   onSaleGlow = true,    -- On Sale: screen glow on a new find until the mouse is over the AH or the On Sale panel
-  scanWarning = true,   -- raid-warning style notice when Auctionator runs a summary scan; history notice after scans
+  summaryScanWarning = true,  -- raid-warning style notice when Auctionator runs a summary scan (Scan.lua)
+  onSaleEnabled = false,      -- On Sale Finder (experimental; Sylice tests it before it's on for everyone)
+  historyReminder = true,     -- On Sale: chat line after a full scan while price history is under 3 of 7 days
+  recipesProfitMode = "stack",  -- Recipes panel at the AH: profit per "stack" or per "craft" (UI/AHRecipes.lua)
   recipesHideKnown = false,  -- Recipes panel at the AH: hide recipes the character knows (UI/AHRecipes.lua)
   ahTabSize = 24,       -- size (px) of the icons of ProfitCraft's tabs at the AH window (UI/AHTabs.lua), 24-44
 }
@@ -34,6 +38,20 @@ upgrades[2] = function(db)
   if type(db.settings) ~= "table" then return end
   if db.settings.reagentBagFreeSlots then db.settings.freeSlots = "reagent" end
   db.settings.reagentBagFreeSlots = nil
+end
+
+-- 0.3.8: On Sale's defaults went from 65% / 40% to 70% / 45% (Sylice, 2026-11-21); settings still at the old
+-- defaults move along (a deliberate 65% or 40% can't be told from the default and moves too).
+upgrades[3] = function(db)
+  if type(db.settings) ~= "table" then return end
+  if db.settings.onSaleGear == 65 then db.settings.onSaleGear = 70 end
+  if db.settings.onSaleReagent == 40 then db.settings.onSaleReagent = 45 end
+  -- The one "scanWarning" checkbox became two (summary scan: General page; thin history: On Sale page).
+  if db.settings.scanWarning ~= nil then
+    db.settings.summaryScanWarning = db.settings.scanWarning
+    db.settings.historyReminder = db.settings.scanWarning
+    db.settings.scanWarning = nil
+  end
 end
 
 local function FillDefaults(target, defaults)

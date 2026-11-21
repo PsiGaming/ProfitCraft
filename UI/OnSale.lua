@@ -824,8 +824,9 @@ local function CreatePanel()
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine("Price history", 1, 1, 1)
     GameTooltip:AddLine("Days in the last 7 on which ProfitCraft read a full scan (Auctionator's detailed scan, or "
-      .. "ProfitCraft's own without Auctionator). An item needs prices on 3 of the last 7 days for a usual price; "
-      .. "weapons and armour only use ProfitCraft's own history.", nil, nil, nil, true)
+      .. "ProfitCraft's own without Auctionator); your searches add prices too. An item needs prices on 3 of the last "
+      .. "7 days for a usual price. Stackable goods can use Auctionator's history meanwhile; gear, recipes and other "
+      .. "single items only ProfitCraft's own.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   history:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -881,6 +882,7 @@ PC.AHTabs:Register({
   help = "Find listings far below their usual price: your searches while it runs, and every full scan.",
   panel = function() return panel end,
   count = function() return #OnSale:GetHits() end,
+  shown = function() return PC.db.settings.onSaleEnabled == true end,
   open = function()
     if not panel then CreatePanel() end
     panel:Show()

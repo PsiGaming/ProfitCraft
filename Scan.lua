@@ -103,11 +103,12 @@ local function Finish()
   PC:Send("SCAN_CHANGED")
   if r.collector and not r.collector.failed then PC:Call("On Sale scan", r.collector.Finish, r.collector) end
   PC:Call("scan days", function()
+    if not PC.db.settings.onSaleEnabled then return end  -- price history belongs to the On Sale Finder
     PC.History:NoteScanDay()
     local days = PC.History:ScanDaysInWeek()
-    if days < PC.History.MIN_DAYS and PC.db.settings.scanWarning then
-      PC:Print(string.format("%sPrice history: full scans on %d of the last 7 days. On Sale's usual prices (and gear "
-        .. "finds) need scans on %d different days.|r", NOTICE_COLOR, days, PC.History.MIN_DAYS))
+    if days < PC.History.MIN_DAYS and PC.db.settings.historyReminder then
+      PC:Print(string.format("%sPrice history: full scans on %d of the last 7 days. Gear, recipes and other single items "
+        .. "need ProfitCraft's own prices on %d different days.|r", NOTICE_COLOR, days, PC.History.MIN_DAYS))
     end
     PC:Send("ONSALE_STATUS")
   end)
@@ -206,7 +207,8 @@ PC:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE", function()
   reading.own, reading.first = own, first
   reading.items, reading.ownForms, reading.ownSkipped = {}, {}, 0
   reading.pending, reading.pendingCount = {}, 0
-  reading.collector = PC.OnSale and PC.OnSale:NewScanCollector()
+  -- On Sale's finds and price history only with the On Sale Finder switched on (Sylice, 2026-11-21: experimental).
+  reading.collector = PC.OnSale and PC.db.settings.onSaleEnabled and PC.OnSale:NewScanCollector() or nil
   ReadBatch()
 end)
 
@@ -227,9 +229,9 @@ local SUMMARY_WARNING = "ProfitCraft: Auctionator ran a SUMMARY scan - On Sale n
 
 -- Only when Auctionator really runs a summary scan, never on opening the AH (Sylice, 2026-11-20). A raid-warning style
 -- message in the middle of the screen (Forever: Blizzard_RaidWarning, RaidWarningFrame:AddMessage) and an orange chat
--- line with the setting's path. Off with the "scanWarning" setting.
+-- line with the setting's path. Off with the "summaryScanWarning" setting.
 local function SummaryNotice()
-  if not PC.db.settings.scanWarning then return end
+  if not PC.db.settings.summaryScanWarning then return end
   if RaidWarningFrame and RaidWarningFrame.AddMessage then
     RaidWarningFrame:AddMessage(SUMMARY_WARNING, ChatTypeInfo and ChatTypeInfo["RAID_WARNING"])
   end
