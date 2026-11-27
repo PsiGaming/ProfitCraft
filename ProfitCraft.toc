@@ -1,0 +1,35 @@
+## Interface: 16001
+## Title: ProfitCraft
+## Notes: Ranks your crafting recipes by profit, finds Auction House listings below vendor price, and estimates disenchant values. Auctionator optional.
+## Author: Psipherious
+## Version: 0.4.0-beta.10
+## SavedVariables: ProfitCraftDB
+## OptionalDeps: Auctionator
+
+Core.lua
+Data.lua
+Sources/Auctionator.lua
+Sources/NoVendorValue.lua
+Sources/ItemData.lua
+Prices.lua
+Scan.lua
+History.lua
+OnSale.lua
+Vendor.lua
+Disenchant.lua
+Recipes.lua
+Profit.lua
+UI/Window.lua
+UI/Panel.lua
+UI/Details.lua
+UI/Tooltip.lua
+UI/RecipeTooltip.lua
+UI/Bags.lua
+UI/BagSpace.lua
+UI/MoneyWindow.lua
+UI/AHTabs.lua
+UI/Rapid.lua
+UI/Vendor.lua
+UI/OnSale.lua
+UI/AHRecipes.lua
+UI/Settings.lua

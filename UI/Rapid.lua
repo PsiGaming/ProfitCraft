@@ -1,0 +1,1014 @@
+-- ProfitCraft: RapidFire (watch list & quick buy; FEATURES.md "RapidFire: watch list & quick buy")
+-- While the AH is open and RapidFire runs, the watched reagents are searched in turn (C_AuctionHouse.SendSearchQuery;
+-- Blizzard allows 100 searches a minute, Forever API docs). Each item is searched every `interval` seconds, but at
+-- least as many seconds as items are active (2026-11-17), so at most one search a second. The AH also pushes
+-- changes to open searches (COMMODITY_SEARCH_RESULTS_UPDATED).
+-- When units at or under an item's max price are listed, a popup offers them; while it shows, only that item is
+-- searched (every second), so the AH's current search is the item being bought, as when buying through Blizzard's
+-- own window. The buy key (default Space) clicks Buy only while the popup shows (SetOverrideBindingClick).
+-- Buying: StartCommoditiesPurchase(itemID, quantity) straight from the click, as Auctionator calls it; then
+-- COMMODITY_PRICE_UPDATED and ConfirmCommoditiesPurchase (Blizzard's buy dialog does the same, Forever source:
+-- Blizzard_AuctionHouseUI/Shared/Blizzard_AuctionHouseBuyDialog.lua). Starting needs the player's key press or click (HasRestrictions, Forever docs).
+-- The quantity is taken from the live listings at that moment, capped by the money to keep; the quote must not
+-- exceed the expected cost of exactly those units, else it is cancelled. No quote within QUOTE_TIMEOUT or no result
+-- within RESULT_TIMEOUT: cancelled, scanning goes on. A Blizzard block (ADDON_ACTION_BLOCKED/FORBIDDEN) is reported.
+-- Short-term history: the cheapest price at each check, last HISTORY_SECONDS, in memory only.
+-- Stackable goods only (bought by quantity); the player's own units are left out (numOwnerItems).
+
+local ADDON_NAME, PC = ...
+
+local Rapid = {}
+PC.Rapid = Rapid
+
+local MAX_ITEMS = 10
+local FLASH_SECONDS = 1.5
+local FOCUS_SPACING = 1         -- seconds between searches of the item the popup offers
+local QUOTE_TIMEOUT = 5
+local RESULT_TIMEOUT = 10
+local HISTORY_SECONDS = 15 * 60
+local HISTORY_BARS = 60
+local INTERVALS = { 1, 3, 5, 10, 30, 60, 300 }
+local TOLERANCES = { 0, 5, 10, 15, 20, 25 }  -- % above the max price a purchase may still cost on average
+local ROW_HEIGHT = 24
+local BUY_BUTTON_NAME = "ProfitCraftRapidFireBuy"
+local SORT_BY_PRICE = { { sortOrder = Enum.AuctionHouseSortOrder and Enum.AuctionHouseSortOrder.Price or 0, reverseSort = false } }
+
+local panel, historyPanel, popup, buyButton, statusText, startButton, idBox, keyButton, keepInput
+local intervalSlider
+local rows = {}
+local running, generation, queueIndex, lastCheck = false, 0, 0, nil
+local listings = {}  -- itemID -> { {unit price, units of other sellers}, ... } cheapest first, from the live search
+local history = {}   -- itemID -> { {time, cheapest unit price}, ... } oldest first
+local pending        -- the purchase in progress: { itemID, quantity, expected, confirmed, token, cost }
+local lastRequest     -- the last purchase request sent: { itemID, version of the item's listings then }
+local listingsVersion = {}  -- itemID -> count of listing updates (a new state of the listings allows a new request)
+local session = { spent = 0, items = {}, order = {} }  -- RapidFire purchases during this AH visit (itemID -> {units, cost})
+local sessionText
+local popupItemID    -- the item the popup offers
+local selectedItemID -- the item the history panel shows
+
+local function Data() return PC.db.rapidFire end
+
+local function Debug(message)
+  if PC.db.settings.debug then PC:Print("RapidFire: " .. message) end
+end
+
+local function Entry(itemID)
+  for _, entry in ipairs(Data().items) do
+    if entry.itemID == itemID then return entry end
+  end
+end
+
+local function ActiveItems()
+  local list = {}
+  for _, entry in ipairs(Data().items) do
+    if entry.on then list[#list + 1] = entry end
+  end
+  return list
+end
+
+local function ItemName(itemID)
+  return PC.Items:GetName(itemID) or ("item " .. itemID)
+end
+
+local function DurationText(seconds)
+  if seconds >= 60 then return (seconds / 60) .. " m" end
+  return seconds .. " s"
+end
+
+-- The highest price per unit RapidFire may pay for an item: its max, and for items added from the Vendor page
+-- (entry.vendorPrice) never as much as a vendor pays (2026-11-24: never lose money on a vendor flip).
+local function Ceiling(entry)
+  if entry.vendorPrice then
+    if PC.Items:IsUnsellable(entry.itemID) then return 0 end  -- learned since: no merchant takes it
+    return math.min(entry.max or 0, entry.vendorPrice - 1)
+  end
+  return entry.max or 0
+end
+
+-- What buying now gets: units at or under the max, cheapest first, as many as the money above the amount to keep
+-- pays for. Returns quantity and total cost (0, 0 when nothing).
+function Rapid:GetDeal(itemID)
+  local entry, levels = Entry(itemID), listings[itemID]
+  if not (entry and entry.on and levels and (entry.max or 0) > 0) then return 0, 0 end
+  local budget = GetMoney() - Data().minBalance
+  local quantity, total = 0, 0
+  local ceiling = Ceiling(entry)
+  for _, level in ipairs(levels) do
+    local price, available = level[1], level[2]
+    if price > ceiling then break end
+    local take = math.min(available, math.floor((budget - total) / price))
+    if take <= 0 then break end
+    quantity, total = quantity + take, total + take * price
+    if take < available then break end
+  end
+  return quantity, total
+end
+
+-- Seconds between each item's checks: the chosen interval, but at least one second per active item.
+function Rapid:GetEffectiveInterval(count)
+  return math.max(Data().interval, count or #ActiveItems())
+end
+
+-- Seconds between two searches.
+function Rapid:GetSpacing(count)
+  count = math.max(count or #ActiveItems(), 1)
+  return self:GetEffectiveInterval(count) / count
+end
+
+local function Search(itemID)
+  C_AuctionHouse.SendSearchQuery(C_AuctionHouse.MakeItemKey(itemID), SORT_BY_PRICE, true)
+  lastCheck = GetTime()
+end
+
+---------------------------------------------------------------------------
+-- History
+---------------------------------------------------------------------------
+
+local function Record(itemID, price)
+  local list = history[itemID]
+  if not list then
+    list = {}
+    history[itemID] = list
+  end
+  local now = GetTime()
+  list[#list + 1] = { now, price }
+  while list[1] and list[1][1] < now - HISTORY_SECONDS do table.remove(list, 1) end
+end
+
+-- now, average, lowest (and when), highest, trend ("up"/"down"/"flat"), number of checks; nil without data.
+function Rapid:GetHistoryStats(itemID)
+  local list = history[itemID]
+  if not list or #list == 0 then return nil end
+  local sum, low, lowTime, high = 0, math.huge, nil, 0
+  for _, point in ipairs(list) do
+    sum = sum + point[2]
+    if point[2] < low then low, lowTime = point[2], point[1] end
+    if point[2] > high then high = point[2] end
+  end
+  local quarter = math.max(1, math.floor(#list / 4))
+  local first, last = 0, 0
+  for i = 1, quarter do
+    first = first + list[i][2]
+    last = last + list[#list - quarter + i][2]
+  end
+  local change = (last - first) / first
+  local trend = change > 0.02 and "up" or (change < -0.02 and "down" or "flat")
+  return { now = list[#list][2], average = sum / #list, low = low, lowAgo = GetTime() - lowTime, high = high,
+    trend = trend, checks = #list }
+end
+
+-- The chart's bars: bar index (1 = oldest, HISTORY_BARS = now) -> the lowest price checked in that bar's time slot.
+-- Slots are fixed to the clock (every check stays in its slot for good); counting them back from "now" made checks
+-- slide between neighbouring bars, so bars jumped up and back (2026-11-17). Only the newest bar changes.
+function Rapid:GetHistoryBars(itemID)
+  local slotLength = HISTORY_SECONDS / HISTORY_BARS
+  local current = math.floor(GetTime() / slotLength)
+  local bars = {}
+  for _, point in ipairs(history[itemID] or {}) do
+    local index = HISTORY_BARS - (current - math.floor(point[1] / slotLength))
+    if index >= 1 and index <= HISTORY_BARS and (not bars[index] or point[2] < bars[index]) then
+      bars[index] = point[2]
+    end
+  end
+  return bars
+end
+
+---------------------------------------------------------------------------
+-- Popup
+---------------------------------------------------------------------------
+
+local Refresh, UpdateHistoryPanel  -- defined below
+
+local function ClearBinding()
+  if popup and not InCombatLockdown() then ClearOverrideBindings(popup) end
+end
+
+local function HidePopup()
+  popupItemID = nil
+  if popup then
+    popup.flashing = false
+    popup:Hide()
+  end
+  ClearBinding()
+end
+
+local function UpdatePopup()
+  local quantity, total = Rapid:GetDeal(popupItemID)
+  popup.icon:SetTexture(PC.Items:GetIcon(popupItemID) or 134400)
+  popup.title:SetText(ItemName(popupItemID))
+  popup.text:SetText(string.format("%d at <= %s  -  total %s", quantity,
+    PC:FormatMoney(Entry(popupItemID).max), PC:FormatMoney(total)))
+  popup.note:SetText("You keep " .. PC:FormatMoney(GetMoney() - total) .. " (at least "
+    .. PC:FormatMoney(Data().minBalance) .. ").")
+  buyButton:SetText("BUY  (" .. GetBindingText(Data().key) .. ")")
+  -- Greyed while a purchase runs or the same request was just sent (until fresh listings arrive). Done here, outside
+  -- the click, never inside it before the purchase call.
+  local repeated = lastRequest and lastRequest.itemID == popupItemID
+    and lastRequest.version == (listingsVersion[popupItemID] or 0)
+  buyButton:SetEnabled(pending == nil and not repeated)
+end
+
+local function PlacePopup()
+  popup:ClearAllPoints()
+  local saved = Data().popupPosition
+  if saved then
+    popup:SetPoint("CENTER", UIParent, "BOTTOMLEFT", saved.x, saved.y)
+  elseif panel and panel:IsShown() then
+    popup:SetPoint("BOTTOM", panel, "BOTTOM", 0, 70)
+  else
+    popup:SetPoint("RIGHT", AuctionHouseFrame, "RIGHT", -20, 0)
+  end
+end
+
+local Reschedule
+
+local function ShowPopup(itemID)
+  popupItemID = itemID
+  popup.flashing = false
+  UpdatePopup()
+  PlacePopup()
+  popup:Show()
+  if Data().sound then PlaySound(SOUNDKIT.RAID_WARNING) end
+  if not InCombatLockdown() then SetOverrideBindingClick(popup, true, Data().key, BUY_BUTTON_NAME) end
+  Reschedule()  -- focus the searches on this item
+end
+
+-- The next watched item with a deal, if any, gets the popup.
+local function OfferNext()
+  if popupItemID then return end
+  for _, entry in ipairs(ActiveItems()) do
+    if Rapid:GetDeal(entry.itemID) > 0 then
+      ShowPopup(entry.itemID)
+      return
+    end
+  end
+end
+
+-- A short message in the popup ("Opportunity gone", "Bought ..."), then it closes and offers the next deal.
+local function Flash(message)
+  popup.flashing = true
+  popup.text:SetText(message)
+  popup.note:SetText("")
+  buyButton:SetEnabled(false)
+  ClearBinding()
+  local shown = popupItemID
+  C_Timer.After(FLASH_SECONDS, function()
+    if popup.flashing and popupItemID == shown then
+      HidePopup()
+      Reschedule()  -- back to checking every item
+      OfferNext()
+    end
+  end)
+end
+
+-- New listings for an item: update the panels and the popup.
+local function Evaluate(itemID)
+  if Refresh then Refresh() end
+  if pending then return end
+  if popupItemID == itemID and not popup.flashing then
+    if Rapid:GetDeal(itemID) > 0 then UpdatePopup() else Flash("Opportunity gone") end
+  elseif not popupItemID then
+    OfferNext()
+  end
+end
+
+local function ReadListings(itemID)
+  if not Entry(itemID) then return end
+  local levels = {}
+  for i = 1, C_AuctionHouse.GetNumCommoditySearchResults(itemID) or 0 do
+    local result = C_AuctionHouse.GetCommoditySearchResultInfo(itemID, i)
+    if result then
+      local units = result.quantity - (result.numOwnerItems or 0)
+      if units > 0 then levels[#levels + 1] = { result.unitPrice, units } end
+    end
+  end
+  table.sort(levels, function(a, b) return a[1] < b[1] end)
+  listings[itemID] = levels
+  listingsVersion[itemID] = (listingsVersion[itemID] or 0) + 1
+  if levels[1] then Record(itemID, levels[1][1]) end
+  Evaluate(itemID)
+  if UpdateHistoryPanel and itemID == selectedItemID then UpdateHistoryPanel() end
+end
+
+for _, event in ipairs({ "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_SEARCH_RESULTS_ADDED" }) do
+  PC:RegisterEvent(event, function(itemID)
+    if running then ReadListings(itemID) end
+  end)
+end
+
+---------------------------------------------------------------------------
+-- Buying
+---------------------------------------------------------------------------
+
+-- Ends the purchase in progress without buying: says why, searches the item again, scanning goes on.
+local function Abandon(message, cancel)
+  local p = pending
+  if not p then return end
+  pending = nil
+  if cancel then C_AuctionHouse.CancelCommoditiesPurchase() end
+  PC:Print(message)
+  if running then Search(p.itemID) end
+  Evaluate(p.itemID)
+end
+
+-- The purchase call comes FIRST in the click: Forever blocks it when the click has already disabled its own button
+-- ("tried to call the protected function StartCommoditiesPurchase()", 2026-11-17; same finding and fix in
+-- other Forever AH addons: Goldbook PR #90, GoldCap PR #22). Before it only plain checks; button, chat and timers after.
+-- A request is sent once per state of the listings: pressing again does nothing until fresh listings for the item
+-- arrive (no repeated requests to the server, also after a blocked or refused one).
+local function Buy()
+  if pending or not popupItemID or popup.flashing then return end
+  local itemID = popupItemID
+  if lastRequest and lastRequest.itemID == itemID and lastRequest.version == (listingsVersion[itemID] or 0) then return end
+  local quantity, total = Rapid:GetDeal(itemID)
+  if quantity == 0 then return end
+  C_AuctionHouse.StartCommoditiesPurchase(itemID, quantity)  -- two arguments, as Auctionator calls it
+  lastRequest = { itemID = itemID, version = listingsVersion[itemID] or 0 }
+  local token = {}
+  pending = { itemID = itemID, quantity = quantity, expected = total, token = token }
+  buyButton:SetEnabled(false)
+  Debug(string.format("asked the AH for a quote: %d x %s, expected %s", quantity, ItemName(itemID),
+    PC:FormatMoney(total)))
+  C_Timer.After(QUOTE_TIMEOUT, function()
+    if pending and pending.token == token and not pending.confirmed then
+      Abandon("not bought: the Auction House didn't answer the purchase request within " .. QUOTE_TIMEOUT
+        .. " seconds.", true)
+    end
+  end)
+end
+
+PC:RegisterEvent("COMMODITY_PRICE_UPDATED", function(unitPrice, totalPrice)
+  local p = pending
+  if not p or p.confirmed then return end
+  Debug(string.format("quote: %s each, %s in total", PC:FormatMoney(unitPrice), PC:FormatMoney(totalPrice)))
+  -- Accepted when it costs what was expected, or (price tolerance) when the average per unit stays within the
+  -- tolerance above the max price (2026-11-17: trigger at the max, still buy if the price moved a little).
+  -- 0% stays strict: exactly the expected cost (no unit above the max).
+  local limit = p.expected
+  local entry = Entry(p.itemID)
+  if Data().tolerance > 0 then
+    limit = math.max(limit, math.floor(entry.max * (1 + Data().tolerance / 100)) * p.quantity)
+  end
+  -- Items added from the Vendor page: never at or above what a vendor pays, whatever the tolerance (nothing at all
+  -- once the item is known to be unsellable).
+  if entry.vendorPrice then limit = math.min(limit, Ceiling(entry) * p.quantity) end
+  if totalPrice <= limit and GetMoney() - totalPrice >= Data().minBalance then
+    p.confirmed = true
+    p.cost = totalPrice  -- what the AH charges; counted in the session summary
+    Debug("confirming")
+    C_AuctionHouse.ConfirmCommoditiesPurchase(p.itemID, p.quantity)
+    local token = p.token
+    C_Timer.After(RESULT_TIMEOUT, function()
+      if pending and pending.token == token then
+        Abandon("no answer from the Auction House after confirming; check your bags and mail.", false)
+      end
+    end)
+  else
+    Abandon(string.format("not bought: %d would now cost %s (%s each), more than allowed (%s).", p.quantity,
+      PC:FormatMoney(totalPrice), PC:FormatMoney(math.floor(totalPrice / p.quantity + 0.5)), PC:FormatMoney(limit)), true)
+  end
+end)
+
+PC:RegisterEvent("COMMODITY_PRICE_UNAVAILABLE", function()
+  Abandon("not bought: no longer available.", true)
+end)
+
+PC:RegisterEvent("COMMODITY_PURCHASE_FAILED", function()
+  Abandon("the purchase failed.", false)
+end)
+
+PC:RegisterEvent("COMMODITY_PURCHASE_SUCCEEDED", function()
+  local p = pending
+  if not p then return end
+  pending = nil
+  PC:Print(string.format("bought %d %s for %s.", p.quantity, ItemName(p.itemID), PC:FormatMoney(p.cost or p.expected)))
+  Rapid:AddToSession(p.itemID, p.quantity, p.cost or p.expected)
+  if popupItemID == p.itemID then Flash(string.format("Bought %d for %s", p.quantity, PC:FormatMoney(p.expected))) end
+  if running then Search(p.itemID) end
+end)
+
+-- Blizzard blocking one of ProfitCraft's calls (shown by Blizzard only as a brief "Interface action failed").
+for _, event in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+  PC:RegisterEvent(event, function(addon, functionName)
+    if addon ~= ADDON_NAME then return end
+    PC:Print("Blizzard blocked ProfitCraft from " .. tostring(functionName) .. ".")
+    if pending then Abandon("purchase stopped.", false) end
+  end)
+end
+
+---------------------------------------------------------------------------
+-- Scanning
+---------------------------------------------------------------------------
+
+local function UpdateStatus()
+  if not statusText then return end
+  local active = #ActiveItems()
+  if running then
+    local effective = Rapid:GetEffectiveInterval(active)
+    local limited = effective > Data().interval and (" (min " .. effective .. " s for " .. active .. " items)") or ""
+    statusText:SetText(string.format("RapidFire: %d items, each every %s%s", active, DurationText(effective), limited))
+    startButton:SetText("Stop")
+  else
+    statusText:SetText("Stopped.")
+    startButton:SetText("Start")
+  end
+end
+
+local Stop
+
+local function Tick(myGeneration)
+  if myGeneration ~= generation or not running then return end
+  local spacing
+  if popupItemID and not popup.flashing then
+    if not pending then Search(popupItemID) end  -- no new search while a purchase is in progress
+    spacing = FOCUS_SPACING
+  else
+    local active = ActiveItems()
+    if #active == 0 then
+      Stop("nothing to watch: add an item and set its max price.")
+      return
+    end
+    if not pending then
+      queueIndex = queueIndex % #active + 1
+      Search(active[queueIndex].itemID)
+    end
+    spacing = Rapid:GetSpacing(#active)
+  end
+  UpdateStatus()
+  C_Timer.After(spacing, function() PC:Call("rapidfire", Tick, myGeneration) end)
+end
+
+-- Restarts the search timing now (interval changed, popup shown or closed).
+function Reschedule()
+  if not running then return end
+  generation = generation + 1
+  Tick(generation)
+end
+
+local function Start()
+  if running then return end
+  if PC.Vendor:IsQuickScanning() then
+    PC:Print("RapidFire: wait for the quick scan to finish (both search the Auction House).")
+    return
+  end
+  if PC.OnSale and PC.OnSale:IsRunning() then PC.OnSale:Stop("RapidFire started (only one can search at a time).") end
+  running = true
+  queueIndex = 0
+  Reschedule()
+end
+
+function Stop(reason)
+  running = false
+  generation = generation + 1
+  if pending then Abandon("purchase stopped.", not pending.confirmed) end
+  HidePopup()
+  UpdateStatus()
+  if reason then PC:Print("RapidFire stopped: " .. reason) end
+end
+
+function Rapid:IsRunning() return running end
+function Rapid:Stop(reason) if running then Stop(reason) end end
+function Rapid:GetPopupItem() return popupItemID end
+function Rapid:IsFlashing() return popup and popup.flashing end
+function Rapid:IsBuying() return pending ~= nil end
+
+---------------------------------------------------------------------------
+-- Session summary: what RapidFire bought during this AH visit. Shown on the panel; printed to chat and reset when
+-- the AH closes (2026-11-17). Purchases made with Blizzard's or Auctionator's buttons are not included: the
+-- game reports those without item, quantity or price.
+---------------------------------------------------------------------------
+
+local function SessionLines()
+  local parts = {}
+  for _, itemID in ipairs(session.order) do
+    local item = session.items[itemID]
+    parts[#parts + 1] = string.format("%d %s (%s)", item.units, ItemName(itemID), PC:FormatMoney(item.cost))
+  end
+  return parts
+end
+
+function Rapid:AddToSession(itemID, units, cost)
+  local item = session.items[itemID]
+  if not item then
+    item = { units = 0, cost = 0 }
+    session.items[itemID] = item
+    session.order[#session.order + 1] = itemID
+  end
+  item.units = item.units + units
+  item.cost = item.cost + cost
+  session.spent = session.spent + cost
+  if Refresh then Refresh() end
+end
+
+function Rapid:GetSession() return session end
+
+local function UpdateSessionText()
+  if not sessionText then return end
+  if #session.order == 0 then
+    sessionText:SetText("This session: nothing bought yet.")
+  else
+    sessionText:SetText("This session: spent " .. PC:FormatMoney(session.spent) .. "  -  "
+      .. table.concat(SessionLines(), ", "))
+  end
+end
+
+local function ResetSession()
+  session = { spent = 0, items = {}, order = {} }
+  UpdateSessionText()
+end
+
+PC:RegisterEvent("AUCTION_HOUSE_CLOSED", function()
+  if running then Stop() end
+  HidePopup()
+  if #session.order > 0 then
+    PC:Print("RapidFire session: spent " .. PC:FormatMoney(session.spent) .. " on " .. table.concat(SessionLines(), ", ")
+      .. ".")
+  end
+  ResetSession()
+end)
+
+---------------------------------------------------------------------------
+-- Watch list
+---------------------------------------------------------------------------
+
+-- Adds an item by ID. Only stackable goods (the AH sells them by quantity); while the item's data is still loading
+-- (stack size unknown) it is added. From the Vendor page (Shift + left-click; 2026-11-24): with a max of one
+-- copper below the vendor price and that vendor price kept (entry.vendorPrice), so RapidFire never pays as much as a
+-- vendor gives (Ceiling, and the quote check); an item already watched gets that max and vendor price. Returns true
+-- when the item is on the list afterwards.
+function Rapid:AddItem(itemID, vendorPrice)
+  itemID = tonumber(itemID)
+  if not itemID then return end
+  local data = Data()
+  local existing = Entry(itemID)
+  if existing and vendorPrice then
+    existing.max, existing.vendorPrice = vendorPrice - 1, vendorPrice
+    if Refresh then Refresh() end
+    return true
+  end
+  if existing then
+    PC:Print("already on the watch list.")
+    return
+  end
+  if #data.items >= MAX_ITEMS then
+    PC:Print("the watch list holds up to " .. MAX_ITEMS .. " items.")
+    return
+  end
+  if C_Item.DoesItemExistByID and not C_Item.DoesItemExistByID(itemID) then
+    PC:Print("there is no item with ID " .. itemID .. ".")
+    return
+  end
+  if PC.Items:GetStackSize(itemID) == 1 then
+    PC:Print("only stackable goods (reagents, cloth, bars...) can be watched for now.")
+    return
+  end
+  table.insert(data.items, { itemID = itemID, max = vendorPrice and vendorPrice - 1 or 0, on = true,
+    vendorPrice = vendorPrice })
+  selectedItemID = selectedItemID or itemID
+  C_Item.RequestLoadItemDataByID(itemID)
+  if Refresh then Refresh() end
+  return true
+end
+
+local function AddFromCursor()
+  local kind, itemID = GetCursorInfo()
+  if kind == "item" and itemID then
+    ClearCursor()
+    Rapid:AddItem(itemID)
+  end
+end
+
+-- Shift-clicking an item link while the "Add item ID" box has focus puts the item's ID there (Forever source:
+-- shift-clicks go through ChatFrameUtil.InsertLink, Blizzard_ChatFrameBase/Mainline/ChatFrameUtilOverrides.lua).
+if type(ChatFrameUtil) == "table" and type(ChatFrameUtil.InsertLink) == "function" then
+  hooksecurefunc(ChatFrameUtil, "InsertLink", function(text)
+    PC:Call("rapidfire link", function()
+      if idBox and idBox:HasFocus() and type(text) == "string" then
+        local itemID = text:match("item:(%d+)")
+        if itemID then idBox:SetText(itemID) end
+      end
+    end)
+  end)
+end
+
+---------------------------------------------------------------------------
+-- Panels
+---------------------------------------------------------------------------
+
+local function MoneyInput(name, parent, onChange)
+  local input = CreateFrame("Frame", name, parent, "MoneyInputFrameTemplate")
+  MoneyInputFrame_SetOnValueChangedFunc(input, function()
+    if not input.updating then PC:Call("rapidfire money", onChange, MoneyInputFrame_GetCopper(input)) end
+  end)
+  return input
+end
+
+local function SetMoney(input, copper)
+  input.updating = true
+  MoneyInputFrame_SetCopper(input, copper or 0)
+  input.updating = false
+end
+
+local function Label(parent, text, x, y, font)
+  local label = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlightSmall")
+  label:SetPoint("TOPLEFT", x, y)
+  label:SetText(text)
+  return label
+end
+
+local function CreateRow(index, parent)
+  local row = CreateFrame("Button", nil, parent)
+  row:SetSize(420, ROW_HEIGHT)
+  row:SetPoint("TOPLEFT", 6, -24 - (index - 1) * ROW_HEIGHT)
+  row:SetScript("OnClick", function()  -- clicking a row shows its history
+    local entry = Data().items[index]
+    if entry then
+      selectedItemID = entry.itemID
+      Refresh()
+    end
+  end)
+  row.highlight = row:CreateTexture(nil, "BACKGROUND")
+  row.highlight:SetAllPoints()
+  row.highlight:SetColorTexture(1, 1, 1, 0.08)
+  row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+  row.check:SetSize(20, 20)
+  row.check:SetPoint("LEFT")
+  row.check:SetScript("OnClick", function(self)
+    local entry = Data().items[index]
+    if entry then entry.on = self:GetChecked() and true or false end
+    Refresh()
+    Reschedule()
+  end)
+  row.icon = row:CreateTexture(nil, "ARTWORK")
+  row.icon:SetSize(16, 16)
+  row.icon:SetPoint("LEFT", 22, 0)
+  row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  row.name:SetSize(100, ROW_HEIGHT)
+  row.name:SetJustifyH("LEFT")
+  row.name:SetPoint("LEFT", 42, 0)
+  row.max = MoneyInput("ProfitCraftRapidFireMax" .. index, row, function(copper)
+    local entry = Data().items[index]
+    if entry then entry.max = copper end
+    Refresh()
+  end)
+  row.max:SetPoint("LEFT", 146, 0)
+  row.now = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  row.now:SetSize(70, ROW_HEIGHT)
+  row.now:SetJustifyH("RIGHT")
+  row.now:SetPoint("LEFT", 322, 0)
+  row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+  row.remove:SetSize(20, 18)
+  row.remove:SetPoint("LEFT", 398, 0)
+  row.remove:SetText("x")
+  row.remove:SetScript("OnClick", function()
+    local entry = table.remove(Data().items, index)
+    if entry then
+      if popupItemID == entry.itemID then HidePopup() end
+      if selectedItemID == entry.itemID then selectedItemID = Data().items[1] and Data().items[1].itemID end
+    end
+    Refresh()
+    Reschedule()
+  end)
+  return row
+end
+
+-- The history panel: a bar chart of the cheapest price at each check (last 15 minutes, in time slots), the max price
+-- as a line, and the numbers below it.
+local function CreateHistoryPanel()
+  historyPanel = PC:CreateWindow("ProfitCraftRapidFireHistory", panel, 300, 580, "Price history")
+  historyPanel:SetPoint("TOPLEFT", panel, "TOPRIGHT", 2, 0)
+  local inset = historyPanel.Inset
+  historyPanel.itemName = Label(inset, "", 10, -8, "GameFontNormal")
+  local chart = CreateFrame("Frame", nil, inset)
+  chart:SetSize(270, 140)
+  chart:SetPoint("TOPLEFT", 10, -32)
+  local background = chart:CreateTexture(nil, "BACKGROUND")
+  background:SetAllPoints()
+  background:SetColorTexture(0, 0, 0, 0.35)
+  chart.bars = {}
+  local width = 270 / HISTORY_BARS
+  for i = 1, HISTORY_BARS do
+    local bar = chart:CreateTexture(nil, "ARTWORK")
+    bar:SetWidth(math.max(width - 1, 1))
+    bar:SetPoint("BOTTOMLEFT", (i - 1) * width, 0)
+    bar:Hide()
+    chart.bars[i] = bar
+  end
+  chart.maxLine = chart:CreateTexture(nil, "OVERLAY")
+  chart.maxLine:SetHeight(1)
+  chart.maxLine:SetWidth(270)
+  chart.maxLine:SetColorTexture(1, 0.82, 0, 0.9)
+  Label(inset, "15 min ago", 10, -176, "GameFontDisableSmall")
+  local nowLabel = Label(inset, "now", 0, -176, "GameFontDisableSmall")
+  nowLabel:ClearAllPoints()
+  nowLabel:SetPoint("TOPRIGHT", chart, "BOTTOMRIGHT", 0, -4)
+  historyPanel.chart = chart
+  historyPanel.stats = Label(inset, "", 10, -200)
+  historyPanel.stats:SetJustifyH("LEFT")
+  historyPanel.stats:SetSpacing(4)
+end
+
+function UpdateHistoryPanel()
+  if not (historyPanel and historyPanel:IsShown()) then return end
+  local itemID = selectedItemID
+  local chart = historyPanel.chart
+  for _, bar in ipairs(chart.bars) do bar:Hide() end
+  chart.maxLine:Hide()
+  if not itemID then
+    historyPanel.itemName:SetText("No item selected")
+    historyPanel.stats:SetText("Click an item on the watch list.")
+    return
+  end
+  historyPanel.itemName:SetText(ItemName(itemID))
+  local stats = Rapid:GetHistoryStats(itemID)
+  if not stats then
+    historyPanel.stats:SetText("No checks yet. Press Start to collect prices.")
+    return
+  end
+  local slots = Rapid:GetHistoryBars(itemID)
+  local max = Entry(itemID) and Entry(itemID).max or 0
+  local low, high = stats.low, math.max(stats.high, max)
+  if max > 0 then low = math.min(low, max) end
+  local range = math.max(high - low, 1)
+  local function Height(price) return 10 + (price - low) / range * 120 end
+  for index, price in pairs(slots) do
+    local bar = chart.bars[index]
+    bar:SetHeight(Height(price))
+    if max > 0 and price <= max then bar:SetColorTexture(0.3, 1, 0.3, 0.9) else bar:SetColorTexture(0.6, 0.6, 0.9, 0.9) end
+    bar:Show()
+  end
+  if max > 0 then
+    chart.maxLine:ClearAllPoints()
+    chart.maxLine:SetPoint("BOTTOMLEFT", 0, Height(max))
+    chart.maxLine:Show()
+  end
+  local arrow = stats.trend == "up" and "|cffff5555rising|r" or (stats.trend == "down" and "|cff55ff55falling|r" or "steady")
+  historyPanel.stats:SetText(table.concat({
+    "Now:  " .. PC:FormatMoney(stats.now),
+    "Average:  " .. PC:FormatMoney(math.floor(stats.average + 0.5)),
+    "Lowest dip:  " .. PC:FormatMoney(stats.low) .. "  (" .. math.floor(stats.lowAgo / 60) .. " min ago)",
+    "Highest:  " .. PC:FormatMoney(stats.high),
+    "Trend:  " .. arrow,
+    "Your max:  " .. (max > 0 and PC:FormatMoney(max) or "not set") .. "  (yellow line)",
+    stats.checks .. " checks in the last 15 minutes",
+  }, "\n"))
+end
+
+function Refresh()
+  if not panel then return end
+  local items = Data().items
+  for index = 1, MAX_ITEMS do
+    local row, entry = rows[index], items[index]
+    row:SetShown(entry ~= nil)
+    if entry then
+      row.check:SetChecked(entry.on)
+      row.icon:SetTexture(PC.Items:GetIcon(entry.itemID) or 134400)
+      row.name:SetText(ItemName(entry.itemID))
+      row.highlight:SetShown(entry.itemID == selectedItemID)
+      if not row.max.gold:HasFocus() and not row.max.silver:HasFocus() and not row.max.copper:HasFocus() then
+        SetMoney(row.max, entry.max)
+      end
+      local levels = listings[entry.itemID]
+      if levels and levels[1] then
+        local cheap = levels[1][1] <= (entry.max or 0)
+        row.now:SetText((cheap and "|cff55ff55" or "") .. PC:FormatMoney(levels[1][1]) .. (cheap and "|r" or ""))
+      elseif levels then
+        row.now:SetText("|cff888888none listed|r")
+      else
+        row.now:SetText("|cff888888-|r")
+      end
+    end
+  end
+  keyButton:SetText("Buy key: " .. GetBindingText(Data().key))
+  UpdateStatus()
+  UpdateSessionText()
+  UpdateHistoryPanel()
+end
+
+local function IntervalPosition()
+  for position, seconds in ipairs(INTERVALS) do
+    if seconds >= Data().interval then return position end
+  end
+  return #INTERVALS
+end
+
+local function CreateIntervalSlider(parent, y)
+  Label(parent, "Check each item every", 10, y)
+  local slider = CreateFrame("Frame", nil, parent, "MinimalSliderWithSteppersTemplate")
+  slider:SetWidth(240)
+  slider:SetPoint("TOPLEFT", 160, y + 4)
+  slider:Init(IntervalPosition(), 1, #INTERVALS, #INTERVALS - 1, { [MinimalSliderWithSteppersMixin.Label.Right] =
+    function(position) return DurationText(INTERVALS[math.floor(position + 0.5)]) end })
+  slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, position)
+    PC:Call("rapidfire interval", function()
+      Data().interval = INTERVALS[math.floor(position + 0.5)]
+      UpdateStatus()
+      Reschedule()  -- takes effect now
+    end)
+  end, parent)
+  return slider
+end
+
+local function CreateToleranceSlider(parent, y)
+  Label(parent, "Price tolerance at purchase", 10, y)
+  local position = 1
+  for index, percent in ipairs(TOLERANCES) do
+    if percent == Data().tolerance then position = index end
+  end
+  local slider = CreateFrame("Frame", nil, parent, "MinimalSliderWithSteppersTemplate")
+  slider:SetWidth(240)
+  slider:SetPoint("TOPLEFT", 160, y + 4)
+  slider:Init(position, 1, #TOLERANCES, #TOLERANCES - 1, { [MinimalSliderWithSteppersMixin.Label.Right] =
+    function(p) return "+" .. TOLERANCES[math.floor(p + 0.5)] .. "%" end })
+  slider:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, p)
+    Data().tolerance = TOLERANCES[math.floor(p + 0.5)]
+  end, parent)
+  slider.Slider:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("Price tolerance at purchase", 1, 1, 1)
+    GameTooltip:AddLine("A deal is offered when units are at or under your max price. If the price moved before the "
+      .. "Auction House answers, the purchase still goes through as long as the average per unit is at most this "
+      .. "much above your max. 0% = never above your max.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  slider.Slider:HookScript("OnLeave", function() GameTooltip:Hide() end)
+  return slider
+end
+
+local function CreateKeyButton(parent)
+  local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  button:SetSize(130, 20)
+  button:SetScript("OnClick", function(self)
+    self.capturing = true
+    self:SetText("Press a key...")
+    self:EnableKeyboard(true)
+  end)
+  button:SetScript("OnKeyDown", function(self, key)
+    if not self.capturing then
+      self:SetPropagateKeyboardInput(true)
+      return
+    end
+    self:SetPropagateKeyboardInput(false)
+    if key:find("SHIFT") or key:find("CTRL") or key:find("ALT") then return end  -- wait for a real key
+    self.capturing = false
+    self:EnableKeyboard(false)
+    if key ~= "ESCAPE" then Data().key = key end
+    Refresh()
+  end)
+  return button
+end
+
+local function CreatePanel()
+  panel = PC:CreateWindow("ProfitCraftRapidFire", AuctionHouseFrame, 440, 580, "ProfitCraft RapidFire")
+  PC.AHTabs:Place(panel)  -- right of the tabs
+  local inset = panel.Inset
+  inset:EnableMouse(true)
+  inset:SetScript("OnReceiveDrag", function() PC:Call("rapidfire drop", AddFromCursor) end)
+  inset:SetScript("OnMouseUp", function() PC:Call("rapidfire drop", AddFromCursor) end)
+
+  Label(inset, "WATCH LIST", 10, -6, "GameFontNormal")
+  local hint = inset:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  hint:SetPoint("TOPRIGHT", -10, -8)
+  hint:SetText("max price per unit; click a row for its history")
+  for index = 1, MAX_ITEMS do rows[index] = CreateRow(index, inset) end
+
+  local y = -30 - MAX_ITEMS * ROW_HEIGHT  -- below the rows
+  local addLabel = Label(inset, "Add item ID:", 10, y - 4)
+  idBox = CreateFrame("EditBox", nil, inset, "InputBoxTemplate")
+  idBox:SetSize(70, 20)
+  idBox:SetPoint("LEFT", addLabel, "RIGHT", 10, 0)
+  idBox:SetAutoFocus(false)
+  idBox:SetNumeric(true)
+  local function AddTyped()
+    Rapid:AddItem(idBox:GetText())
+    idBox:SetText("")
+    idBox:ClearFocus()
+  end
+  idBox:SetScript("OnEnterPressed", function() PC:Call("rapidfire add", AddTyped) end)
+  local addButton = CreateFrame("Button", nil, inset, "UIPanelButtonTemplate")
+  addButton:SetSize(50, 20)
+  addButton:SetPoint("LEFT", idBox, "RIGHT", 6, 0)
+  addButton:SetText("Add")
+  addButton:SetScript("OnClick", function() PC:Call("rapidfire add", AddTyped) end)
+  local addHint = inset:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  addHint:SetPoint("LEFT", addButton, "RIGHT", 8, 0)
+  addHint:SetText("or drop / shift-click an item")
+
+  y = y - 32
+  local keepLabel = Label(inset, "Keep at least", 10, y - 4)
+  keepInput = MoneyInput("ProfitCraftRapidFireKeep", inset, function(copper) Data().minBalance = copper end)
+  keepInput:SetPoint("LEFT", keepLabel, "RIGHT", 10, 0)
+  SetMoney(keepInput, Data().minBalance)
+
+  y = y - 30
+  intervalSlider = CreateIntervalSlider(inset, y)
+
+  y = y - 30
+  CreateToleranceSlider(inset, y)
+
+  y = y - 30
+  local sound = CreateFrame("CheckButton", nil, inset, "UICheckButtonTemplate")
+  sound:SetSize(22, 22)
+  sound:SetPoint("TOPLEFT", 6, y + 2)
+  sound.Text:SetText("Sound")
+  sound.Text:SetFontObject("GameFontHighlightSmall")
+  sound:SetChecked(Data().sound)
+  sound:SetScript("OnClick", function(self) Data().sound = self:GetChecked() and true or false end)
+  keyButton = CreateKeyButton(inset)
+  keyButton:SetPoint("TOPLEFT", 160, y)
+
+  y = y - 30
+  sessionText = inset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  sessionText:SetPoint("TOPLEFT", 10, y)
+  sessionText:SetPoint("RIGHT", inset, "RIGHT", -10, 0)
+  sessionText:SetJustifyH("LEFT")
+  sessionText:SetMaxLines(2)
+
+  -- Bottom line: the status, and Start/Stop at the right (2026-11-17).
+  startButton = CreateFrame("Button", nil, inset, "UIPanelButtonTemplate")
+  startButton:SetSize(80, 22)
+  startButton:SetPoint("BOTTOMRIGHT", -8, 8)
+  startButton:SetScript("OnClick", function()
+    PC:Call("rapidfire start", function() if running then Stop() else Start() end end)
+  end)
+  statusText = inset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  statusText:SetPoint("LEFT", inset, "BOTTOMLEFT", 10, 19)
+  statusText:SetPoint("RIGHT", startButton, "LEFT", -10, 0)
+  statusText:SetJustifyH("LEFT")
+
+  CreateHistoryPanel()
+  historyPanel:Show()  -- PC:CreateWindow creates windows hidden; it shows and hides with the RapidFire panel (its parent)
+  panel:HookScript("OnShow", Refresh)
+  historyPanel:HookScript("OnShow", UpdateHistoryPanel)
+  selectedItemID = selectedItemID or (Data().items[1] and Data().items[1].itemID)
+end
+
+local function CreatePopup()
+  popup = CreateFrame("Frame", "ProfitCraftRapidFirePopup", UIParent, "BasicFrameTemplateWithInset")
+  popup:SetSize(360, 140)
+  popup:SetFrameStrata("DIALOG")
+  popup:SetClampedToScreen(true)
+  popup:SetMovable(true)
+  popup:EnableMouse(true)
+  popup:RegisterForDrag("LeftButton")
+  popup:SetScript("OnDragStart", popup.StartMoving)
+  popup:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local x, y = self:GetCenter()
+    Data().popupPosition = { x = x, y = y }  -- remembered from now on
+  end)
+  popup:Hide()
+  popup.TitleText:SetText("ProfitCraft RapidFire")
+  popup.icon = popup:CreateTexture(nil, "ARTWORK")
+  popup.icon:SetSize(32, 32)
+  popup.icon:SetPoint("TOPLEFT", 14, -32)
+  popup.title = popup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  popup.title:SetPoint("TOPLEFT", popup.icon, "TOPRIGHT", 8, 0)
+  popup.text = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  popup.text:SetPoint("TOPLEFT", popup.title, "BOTTOMLEFT", 0, -4)
+  popup.note = popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  popup.note:SetPoint("TOPLEFT", popup.text, "BOTTOMLEFT", 0, -4)
+  buyButton = CreateFrame("Button", BUY_BUTTON_NAME, popup, "UIPanelButtonTemplate")
+  buyButton:SetSize(220, 32)
+  buyButton:SetPoint("BOTTOM", 0, 12)
+  buyButton:SetScript("OnClick", Buy)  -- no error catcher in between: the purchase must start straight from the click
+  popup:SetScript("OnHide", ClearBinding)
+  popup.CloseButton:SetScript("OnClick", function()
+    HidePopup()
+    Reschedule()
+  end)
+end
+
+PC.AHTabs:Register({
+  key = "rapidfire",
+  title = "RapidFire",
+  order = 3,
+  icon = "Interface\\Icons\\Ability_Hunter_RunningShot",
+  help = "Watch a few items closely and buy them at your price with one key.",
+  panel = function() return panel end,
+  open = function()
+    if not panel then CreatePanel() end
+    panel:Show()
+    PC:Send("AH_PANEL_SHOWN", "rapid")  -- one panel at the AH's edge at a time
+  end,
+})
+
+PC:RegisterEvent("AUCTION_HOUSE_SHOW", function()
+  ResetSession()  -- a new AH visit (also if the last one ended without the closing event)
+  if AuctionHouseFrame and not popup then CreatePopup() end
+end)
+
+PC:Listen("AH_PANEL_SHOWN", function(which)
+  if which ~= "rapid" and panel then panel:Hide() end
+end)
+
+PC:Listen("ITEM_DATA_CHANGED", function()
+  if panel and panel:IsShown() then Refresh() end
+  if popupItemID and not popup.flashing then UpdatePopup() end
+end)
+
+-- "Keep at least" changed in ProfitCraft's settings (the same amount, Settings > Opportunities).
+PC:Listen("SETTINGS_CHANGED", function(key)
+  if key == "keepAtLeast" and keepInput then SetMoney(keepInput, Data().minBalance) end
+end)
